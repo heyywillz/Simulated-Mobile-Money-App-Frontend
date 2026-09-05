@@ -10,10 +10,13 @@
     "dev": "pnpm run dev:web",
     "build:web": "pnpm --filter @momo/web build",
     "build:admin": "pnpm --filter @momo/admin build",
-    "typecheck": "pnpm -r run typecheck",
     "clean": "pnpm -r exec rm -rf node_modules dist .expo"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "babel-plugin-syntax-hermes-parser": "^0.37.0",
+    "babel-preset-expo": "^57.0.10"
   }
 }

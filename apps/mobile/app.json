@@ -54,7 +54,10 @@
         {
           "faceIDPermission": "Swipe Pay uses biometric defense to secure your wallet."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-status-bar"
     ],
     "web": {
       "bundler": "metro"
