@@ -1,0 +1,19 @@
+{
+  "name": "momo-fraud-detection",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simulated mobile money platform with AI-based fraud detection",
+  "scripts": {
+    "dev:web": "pnpm --filter @momo/web dev",
+    "dev:admin": "pnpm --filter @momo/admin dev",
+    "dev:mobile": "pnpm --filter @momo/mobile start",
+    "dev": "pnpm run dev:web",
+    "build:web": "pnpm --filter @momo/web build",
+    "build:admin": "pnpm --filter @momo/admin build",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r exec rm -rf node_modules dist .expo"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
