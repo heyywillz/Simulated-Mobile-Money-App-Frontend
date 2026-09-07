@@ -1,33 +1,33 @@
-import React from 'react'
+import React from 'react';
 import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
   Outlet,
-} from 'react-router-dom'
-import { useAuth } from './contexts/AuthContext'
-import AppLayout from './components/AppLayout'
-import Login from './pages/Login'
-import Onboarding, { action as onboardingAction } from './pages/Onboarding'
-import Dashboard, { loader as dashboardLoader } from './pages/Dashboard'
-import SendMoney from './pages/SendMoney'
-import CashOut from './pages/CashOut'
-import CashIn from './pages/CashIn'
-import PayBill from './pages/PayBill'
-import BuyGoods from './pages/BuyGoods'
-import TransactionHistory from './pages/TransactionHistory'
-import Notifications from './pages/Notifications'
-import FacialVerification from './pages/FacialVerification'
-import Profile from './pages/Profile'
-import MobileSimulator from './pages/MobileSimulator'
+} from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
+import AppLayout from './components/AppLayout';
+import Login from './pages/Login';
+import Onboarding, { action as onboardingAction } from './pages/Onboarding';
+import Dashboard, { loader as dashboardLoader } from './pages/Dashboard';
+import SendMoney from './pages/SendMoney';
+import CashOut from './pages/CashOut';
+import CashIn from './pages/CashIn';
+import PayBill from './pages/PayBill';
+import BuyGoods from './pages/BuyGoods';
+import TransactionHistory from './pages/TransactionHistory';
+import Notifications from './pages/Notifications';
+import FacialVerification from './pages/FacialVerification';
+import Profile from './pages/Profile';
+import MobileSimulator from './pages/MobileSimulator';
 
-import swipePayRedLogo from './assets/swipe-pay-red-logo.png'
+import swipePayRedLogo from './assets/swipe-pay-red-logo.png';
 
-import { Provider } from 'react-redux'
-import store from '../redux_store/stores'
+import { Provider } from 'react-redux';
+import store from '../redux_store/stores';
 
 function ProtectedRoute({ children, hideNav = false }) {
-  const { isAuthenticated, isLoading, facialVerified } = useAuth()
+  const { isAuthenticated, isLoading, facialVerified } = useAuth();
 
   if (isLoading) {
     return (
@@ -38,26 +38,30 @@ function ProtectedRoute({ children, hideNav = false }) {
             alt="Swipe Pay"
             className="w-14 h-14 object-contain"
           />
-          <p className="text-xs font-bold text-neutral-500">Loading your secure wallet...</p>
+          <p className="text-xs font-bold text-neutral-500">
+            Loading your secure wallet...
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
+  // to stop auto navigate
+  // if (!isAuthenticated) {
+  //   return <Navigate to="/login" replace />;
+  // }
 
   if (!facialVerified) {
-    const bioType = sessionStorage.getItem('pending_biometric_type') || 'facial'
-    return <Navigate to={`/verify/facial?type=${bioType}`} replace />
+    const bioType =
+      sessionStorage.getItem('pending_biometric_type') || 'facial';
+    return <Navigate to={`/verify/facial?type=${bioType}`} replace />;
   }
 
-  return <AppLayout hideNav={hideNav}>{children}</AppLayout>
+  return <AppLayout hideNav={hideNav}>{children}</AppLayout>;
 }
 
 function BiometricRoute({ children }) {
-  const { isAuthenticated, isLoading, facialVerified } = useAuth()
+  const { isAuthenticated, isLoading, facialVerified } = useAuth();
 
   if (isLoading) {
     return (
@@ -68,35 +72,39 @@ function BiometricRoute({ children }) {
             alt="Swipe Pay"
             className="w-14 h-14 object-contain"
           />
-          <p className="text-xs font-bold text-neutral-500">Loading your secure wallet...</p>
+          <p className="text-xs font-bold text-neutral-500">
+            Loading your secure wallet...
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
+  //login stopped
+  // if (!isAuthenticated) {
+  //   return <Navigate to="/login" replace />;
+  // }
 
   if (facialVerified) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/" replace />;
   }
 
-  return <>{children}</>
+  return <>{children}</>;
 }
 
 function PublicRoute({ children }) {
-  const { isAuthenticated, facialVerified } = useAuth()
+  const { isAuthenticated, facialVerified } = useAuth();
 
   if (isAuthenticated) {
     if (!facialVerified) {
-      const bioType = sessionStorage.getItem('pending_biometric_type') || 'facial'
-      return <Navigate to={`/verify/facial?type=${bioType}`} replace />
+      const bioType =
+        sessionStorage.getItem('pending_biometric_type') || 'facial';
+      return <Navigate to={`/verify/facial?type=${bioType}`} replace />;
     }
-    return <Navigate to="/" replace />
+    return <Navigate to="/" replace />;
   }
 
-  return <>{children}</>
+  return <>{children}</>;
 }
 
 function RootLayout() {
@@ -104,7 +112,7 @@ function RootLayout() {
     <div className="min-h-screen bg-[#F5F5F7]">
       <Outlet />
     </div>
-  )
+  );
 }
 
 const router = createBrowserRouter([
@@ -133,7 +141,16 @@ const router = createBrowserRouter([
 
       // Protected routes
       {
-        index: true,
+        path: 'dashboard',
+        element: (
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        ),
+        loader: dashboardLoader,
+      },
+      {
+        index: 'dashboard',
         element: (
           <ProtectedRoute>
             <Dashboard />
@@ -223,18 +240,18 @@ const router = createBrowserRouter([
       },
 
       // Fallback
-      {
-        path: '*',
-        element: <Navigate to="/" replace />,
-      },
+      // {
+      //   path: '*',
+      //   element: <Navigate to="/" replace />,
+      // },
     ],
   },
-])
+]);
 
 export default function App() {
   return (
     <Provider store={store}>
       <RouterProvider router={router} />
     </Provider>
-  )
+  );
 }

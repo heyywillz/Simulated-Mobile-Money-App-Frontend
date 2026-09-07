@@ -3,11 +3,14 @@
  * Filter tabs, instant search, detailed modal view, and color-coded status badges.
  */
 
-import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { StatusBadge } from '../components/StatusBadge'
-import { formatCurrency, TRANSACTION_TYPE_LABELS } from '@momo/shared/src/constants'
-import * as api from '@momo/shared/src/api/endpoints'
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { StatusBadge } from '../components/StatusBadge';
+import {
+  formatCurrency,
+  TRANSACTION_TYPE_LABELS,
+} from '@momo/shared/src/constants';
+import * as api from '@momo/shared/src/api/endpoints';
 
 import {
   SendIcon,
@@ -19,49 +22,64 @@ import {
   HistoryIcon,
   EmptyBoxIcon,
   CheckIcon,
-} from '@momo/shared/src/components/Icons'
+} from '@momo/shared/src/components/Icons';
+import axios from 'axios';
 
 export default function TransactionHistory() {
-  const navigate = useNavigate()
-  const [transactions, setTransactions] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedTxn, setSelectedTxn] = useState(null)
+  const navigate = useNavigate();
+  const [transactions, setTransactions] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTxn, setSelectedTxn] = useState(null);
 
   useEffect(() => {
-    loadTransactions()
-  }, [])
+    loadTransactions();
+  }, []);
 
   const loadTransactions = async () => {
     try {
-      const txns = await api.getTransactions({ limit: 50 })
-      setTransactions(txns)
+      // const txns = await api.getTransactions({ limit: 50 })
+
+      const txns = await axios.get('http://localhost:5000/transaction/user');
+      console.log('all_transactions', txns, txns.data);
+      setTransactions(txns?.data);
     } catch (err) {
-      console.error('Failed to load transactions:', err)
+      console.error('Failed to load transactions:', err);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
-      if (filter === 'outgoing' && !['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(t.type)) return false
-      if (filter === 'incoming' && !['receive', 'cash_in'].includes(t.type)) return false
-      if (filter === 'flagged' && !['flagged', 'under_review'].includes(t.status)) return false
-      if (filter === 'blocked' && t.status !== 'blocked') return false
+      if (
+        filter === 'outgoing' &&
+        !['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(t.type)
+      )
+        return false;
+      if (filter === 'incoming' && !['receive', 'cash_in'].includes(t.type))
+        return false;
+      if (
+        filter === 'flagged' &&
+        !['flagged', 'under_review'].includes(t.status)
+      )
+        return false;
+      if (filter === 'blocked' && t.status !== 'blocked') return false;
 
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase()
-        const matchName = (t.receiverName || '').toLowerCase().includes(q)
-        const matchPhone = (t.receiver || '').toLowerCase().includes(q)
-        const matchType = (TRANSACTION_TYPE_LABELS[t.type] || t.type).toLowerCase().includes(q)
-        const matchId = t.id.toLowerCase().includes(q)
-        if (!matchName && !matchPhone && !matchType && !matchId) return false
+        const q = searchQuery.toLowerCase();
+        const matchName = (t.receiverName || '').toLowerCase().includes(q);
+        const matchPhone = (t.receiver || '').toLowerCase().includes(q);
+        const matchType = (TRANSACTION_TYPE_LABELS[t.type] || t.type)
+          .toLowerCase()
+          .includes(q);
+        const matchId = t.id.toLowerCase().includes(q);
+        if (!matchName && !matchPhone && !matchType && !matchId) return false;
       }
-      return true
-    })
-  }, [transactions, filter, searchQuery])
+      return true;
+    });
+  }, [transactions, filter, searchQuery]);
 
   const filters = [
     { value: 'all', label: 'All Activity' },
@@ -69,44 +87,46 @@ export default function TransactionHistory() {
     { value: 'incoming', label: 'Cash In' },
     { value: 'flagged', label: 'Flagged / Review' },
     { value: 'blocked', label: 'Blocked' },
-  ]
+  ];
 
   const getTransactionIcon = (type) => {
     switch (type) {
       case 'send':
-        return <SendIcon size={18} color="#8A0F13" />
+        return <SendIcon size={18} color="#8A0F13" />;
       case 'receive':
-        return <ReceiveIcon size={18} color="#059669" />
+        return <ReceiveIcon size={18} color="#059669" />;
       case 'cash_out':
-        return <CashOutIcon size={18} color="#D97706" />
+        return <CashOutIcon size={18} color="#D97706" />;
       case 'cash_in':
-        return <CashInIcon size={18} color="#0D9488" />
+        return <CashInIcon size={18} color="#0D9488" />;
       case 'pay_bill':
-        return <PayBillIcon size={18} color="#059669" />
+        return <PayBillIcon size={18} color="#059669" />;
       case 'buy_goods':
-        return <BuyGoodsIcon size={18} color="#E11D48" />
+        return <BuyGoodsIcon size={18} color="#E11D48" />;
       default:
-        return <HistoryIcon size={18} color="#6B7280" />
+        return <HistoryIcon size={18} color="#6B7280" />;
     }
-  }
+  };
 
   const getAmountDisplay = (txn) => {
-    const isOutgoing = ['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(txn.type)
-    const prefix = isOutgoing ? '−' : '+'
-    const color = isOutgoing ? 'text-neutral-900' : 'text-green-700'
-    return { prefix, color }
-  }
+    const isOutgoing = ['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(
+      txn.type,
+    );
+    const prefix = isOutgoing ? '−' : '+';
+    const color = isOutgoing ? 'text-neutral-900' : 'text-green-700';
+    return { prefix, color };
+  };
 
   const formatDateTime = (dateStr) => {
-    const date = new Date(dateStr)
+    const date = new Date(dateStr);
     return date.toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    })
-  }
+    });
+  };
 
   return (
     <div className="page-container animate-fade-in max-w-6xl mx-auto">
@@ -118,13 +138,27 @@ export default function TransactionHistory() {
             className="w-10 h-10 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-center hover:bg-neutral-100 transition-colors text-neutral-700 md:hidden"
             aria-label="Back"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
             </svg>
           </button>
           <div>
-            <h1 className="text-xl font-black text-neutral-900 tracking-tight">Statement & History</h1>
-            <p className="text-xs text-neutral-500 font-medium">{transactions.length} total operations recorded</p>
+            <h1 className="text-xl font-black text-neutral-900 tracking-tight">
+              Statement & History
+            </h1>
+            <p className="text-xs text-neutral-500 font-medium">
+              {transactions.length} total operations recorded
+            </p>
           </div>
         </div>
 
@@ -173,7 +207,10 @@ export default function TransactionHistory() {
       {isLoading ? (
         <div className="bg-white rounded-3xl border border-neutral-200 p-6 space-y-3">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-16 bg-neutral-50 rounded-xl animate-pulse" />
+            <div
+              key={i}
+              className="h-16 bg-neutral-50 rounded-xl animate-pulse"
+            />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -181,13 +218,17 @@ export default function TransactionHistory() {
           <div className="mb-3 text-neutral-300">
             <EmptyBoxIcon size={44} />
           </div>
-          <p className="text-neutral-700 font-bold text-sm">No transactions match your search</p>
-          <p className="text-neutral-400 text-xs mt-1">Try switching filters or search terms</p>
+          <p className="text-neutral-700 font-bold text-sm">
+            No transactions match your search
+          </p>
+          <p className="text-neutral-400 text-xs mt-1">
+            Try switching filters or search terms
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-3xl border border-neutral-200 shadow-xs divide-y divide-neutral-100 overflow-hidden">
           {filtered.map((txn) => {
-            const { prefix, color } = getAmountDisplay(txn)
+            const { prefix, color } = getAmountDisplay(txn);
             return (
               <div
                 key={txn.id}
@@ -206,20 +247,29 @@ export default function TransactionHistory() {
                     <StatusBadge status={txn.status} />
                   </div>
                   <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
-                    <span className="font-semibold text-neutral-700">{txn.receiverName || txn.receiver || 'Swipe Pay'}</span>
+                    <span className="font-semibold text-neutral-700">
+                      {txn.receiverName || txn.receiver || 'Swipe Pay'}
+                    </span>
                     <span>•</span>
-                    <span className="font-mono text-[11px]">{formatDateTime(txn.createdAt)}</span>
+                    <span className="font-mono text-[11px]">
+                      {formatDateTime(txn.createdAt)}
+                    </span>
                   </div>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <p className={`text-sm sm:text-base font-black font-mono ${color}`}>
-                    {prefix}{formatCurrency(txn.amount)}
+                  <p
+                    className={`text-sm sm:text-base font-black font-mono ${color}`}
+                  >
+                    {prefix}
+                    {formatCurrency(txn.amount)}
                   </p>
-                  <p className="text-[10px] text-neutral-400 uppercase font-medium">GHS</p>
+                  <p className="text-[10px] text-neutral-400 uppercase font-medium">
+                    GHS
+                  </p>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       )}
@@ -229,7 +279,9 @@ export default function TransactionHistory() {
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-neutral-200 max-w-md w-full p-6 shadow-xl animate-scale-in">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-neutral-100">
-              <h3 className="text-base font-bold text-neutral-900">Transaction Receipt</h3>
+              <h3 className="text-base font-bold text-neutral-900">
+                Transaction Receipt
+              </h3>
               <button
                 onClick={() => setSelectedTxn(null)}
                 className="w-8 h-8 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-600 text-sm"
@@ -253,33 +305,46 @@ export default function TransactionHistory() {
             <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200/60 text-xs space-y-2 mb-6">
               <div className="flex justify-between">
                 <span className="text-neutral-500">Transaction ID:</span>
-                <span className="font-mono font-bold text-neutral-800 text-[11px]">{selectedTxn.id}</span>
+                <span className="font-mono font-bold text-neutral-800 text-[11px]">
+                  {selectedTxn.id}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-500">Type:</span>
-                <span className="font-bold text-neutral-800">{TRANSACTION_TYPE_LABELS[selectedTxn.type] ?? selectedTxn.type}</span>
+                <span className="font-bold text-neutral-800">
+                  {TRANSACTION_TYPE_LABELS[selectedTxn.type] ??
+                    selectedTxn.type}
+                </span>
               </div>
               {selectedTxn.receiver && (
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Recipient:</span>
-                  <span className="font-mono font-bold text-neutral-800">{selectedTxn.receiver}</span>
+                  <span className="font-mono font-bold text-neutral-800">
+                    {selectedTxn.receiver}
+                  </span>
                 </div>
               )}
               {selectedTxn.receiverName && (
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Name:</span>
-                  <span className="font-bold text-neutral-800">{selectedTxn.receiverName}</span>
+                  <span className="font-bold text-neutral-800">
+                    {selectedTxn.receiverName}
+                  </span>
                 </div>
               )}
               {selectedTxn.reason && (
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Note:</span>
-                  <span className="font-medium text-neutral-700 text-right max-w-[200px]">{selectedTxn.reason}</span>
+                  <span className="font-medium text-neutral-700 text-right max-w-[200px]">
+                    {selectedTxn.reason}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-neutral-500">Date:</span>
-                <span className="font-medium text-neutral-700">{formatDateTime(selectedTxn.createdAt)}</span>
+                <span className="font-medium text-neutral-700">
+                  {formatDateTime(selectedTxn.createdAt)}
+                </span>
               </div>
             </div>
 
@@ -293,5 +358,5 @@ export default function TransactionHistory() {
         </div>
       )}
     </div>
-  )
+  );
 }

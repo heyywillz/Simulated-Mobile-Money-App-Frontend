@@ -4,16 +4,19 @@
  * desktop layout, quick service grid, live AI defense telemetry, and instant statement feed.
  */
 
-import { useState, useEffect } from 'react'
-import { useLoaderData, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { StatusBadge } from '../components/StatusBadge'
-import { formatCurrency, TRANSACTION_TYPE_LABELS } from '@momo/shared/src/constants'
-import * as api from '@momo/shared/src/api/endpoints'
-import { PRESET_LOCATIONS } from '@momo/shared/src/utils/location'
-import { createUserSocket } from '@momo/shared/src/socket/client'
-import { loginUser } from '../../redux_store/features/dashboard'
-import swipePayLogo from '../assets/swipe-pay-logo.png'
+import { useState, useEffect, useTransition } from 'react';
+import { useLoaderData, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { StatusBadge } from '../components/StatusBadge';
+import {
+  formatCurrency,
+  TRANSACTION_TYPE_LABELS,
+} from '@momo/shared/src/constants';
+import * as api from '@momo/shared/src/api/endpoints';
+import { PRESET_LOCATIONS } from '@momo/shared/src/utils/location';
+import { createUserSocket } from '@momo/shared/src/socket/client';
+import { loginUser } from '../../redux_store/features/dashboard';
+import swipePayLogo from '../assets/swipe-pay-logo.png';
 
 import {
   SendIcon,
@@ -31,129 +34,198 @@ import {
   ShieldCheckIcon,
   SparklesIcon,
   LocationPinIcon,
-} from '@momo/shared/src/components/Icons'
-import { useAppDispatch, useAppSelector } from '../store/hooks'
+} from '@momo/shared/src/components/Icons';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   setBalance,
   toggleShowBalance,
   setTransactions,
   addTransaction,
   setHasNewAlert,
-} from '../store'
-import axios from 'axios'
-import { useDispatch } from 'react-redux'
+} from '../store';
+import axios from 'axios';
+import { useDispatch, useSelector } from 'react-redux';
 
 export default function Dashboard() {
-  const { user, token, sessionId, currentLocation, locationPermission, detectLocation, requestLocationPermission, logout } = useAuth()
-  const navigate = useNavigate()
-  const dispatch = useAppDispatch()
-  const data = useLoaderData()
+  const {
+    user,
+    token,
+    sessionId,
+    currentLocation,
+    locationPermission,
+    detectLocation,
+    requestLocationPermission,
+    logout,
+  } = useAuth();
+  const navigate = useNavigate();
+  const dispatch = useDispatch() || useAppDispatch();
+  const data = useLoaderData();
 
-  const balance = useAppSelector((state) => state.wallet?.balance ?? { available: 5000, ledger: 5000, currency: 'GHS' })
-  const showBalance = useAppSelector((state) => state.wallet?.showBalance ?? true)
-  const transactions = useAppSelector((state) => state.transactions?.transactions ?? [])
-  const hasNewAlert = useAppSelector((state) => state.alerts?.hasNewAlert ?? false)
+  const balance = useAppSelector(
+    (state) =>
+      state.wallet?.balance ?? {
+        available: 5000,
+        ledger: 5000,
+        currency: 'GHS',
+      },
+  );
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [copiedPhone, setCopiedPhone] = useState(false)
-  const [showQrModal, setShowQrModal] = useState(false)
+  const { user: userState } = useAppSelector((state) => state.dashboard);
 
-  const [input, setInput] = useState({ fullName: null, password: null, ghanaCard: null, email: null })
+  console.log('userState', userState);
+  const showBalance = useAppSelector(
+    (state) => state.wallet?.showBalance ?? true,
+  );
+  const transactions = useAppSelector(
+    (state) => state.transactions?.transactions ?? [],
+  );
+  const hasNewAlert = useAppSelector(
+    (state) => state.alerts?.hasNewAlert ?? false,
+  );
 
-  const dispatcher = useDispatch()
+  const [isLoading, setIsLoading] = useState(true);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+
+  const [input, setInput] = useState({
+    fullName: null,
+    password: null,
+    ghanaCard: null,
+    email: null,
+  });
+
+  const dispatcher = useDispatch();
+
+  useEffect(() => {
+    async function getAllTransactions() {
+      try {
+        const usersTransactions = await axios.get(
+          'http://localhost:5000/transaction/user',
+          { params: { page: 1, limit: 10 } },
+          { withCredentials: true },
+        );
+        dispatch(setTransactions(usersTransactions?.data));
+        console.log(
+          'users transactions',
+          usersTransactions,
+          usersTransactions?.data,
+        );
+        // const { transactions } = useAppSelector((state) => state.transactions);
+        // useAppDispatch(setTransactions(usersTransactions?.data));
+        // useDispatch(setTransactions(usersTransactions?.data));
+      } catch (error) {
+        console.log('error', error?.message || error);
+      }
+    }
+    getAllTransactions();
+  }, []);
 
   useEffect(() => {
     if (data) {
-      console.log("data", data)
-      dispatcher(loginUser(data?.user ?? data))
+      console.log('data', data);
+      dispatcher(loginUser(data?.user ?? data));
     }
-  }, [data])
+  }, [data]);
 
   useEffect(() => {
-    loadData()
-  }, [])
+    loadData();
+  }, []);
 
   // Sync authenticated user to the dashboard Redux slice
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await axios.get("https://machine-learning-server-ohnz.onrender.com/user", {
-          withCredentials: true,
-        })
+        const res = await axios.get(
+          // 'https://machine-learning-server-ohnz.onrender.com/user',
+          'http://localhost:5000/user',
+          {
+            withCredentials: true,
+          },
+        );
+        console.log('user response', res);
         if (res?.data) {
-          dispatcher(loginUser(res.data))
+          dispatcher(loginUser(res.data));
         }
       } catch (error) {
-        console.log(error?.message)
+        console.log(error?.message);
       }
     }
-    fetchUser()
-  }, [])
+    fetchUser();
+  }, []);
 
   // Server ping / health check on mount
-  useEffect(() => {
-    const checkServer = async () => {
-      try {
-        const res = await axios.get("https://machine-learning-server-ohnz.onrender.com")
-        console.log('Server response:', res.data)
-      } catch (error) {
-        console.log('Server check error:', error?.message)
-      }
-    }
-    checkServer()
-  }, [])
+  // useEffect(() => {
+  //   const checkServer = async () => {
+  //     try {
+  //       const res = await axios.get(
+  //         // 'https://machine-learning-server-ohnz.onrender.com',
+
+  //         'http://localhost:5000/user',
+  //       );
+  //       console.log('Server response:', res.data);
+  //     } catch (error) {
+  //       console.log('Server check error:', error?.message);
+  //     }
+  //   };
+  //   checkServer();
+  // }, []);
 
   // Live Socket.io Sync
   useEffect(() => {
-    if (!token || !sessionId) return
+    if (!token || !sessionId) return;
 
-    const socket = createUserSocket(token, sessionId)
+    const socket = createUserSocket(token, sessionId);
 
     socket.on('balance:updated', (newBalance) => {
-      dispatch(setBalance(newBalance))
-    })
+      dispatch(setBalance(newBalance));
+    });
 
     socket.on('transaction:updated', (newTxn) => {
-      dispatch(addTransaction(newTxn))
-    })
+      dispatch(addTransaction(newTxn));
+    });
 
-    socket.on('transaction:status_changed', ({ transactionId, status, reason }) => {
-      const updated = transactions.map((t) =>
-        t.id === transactionId ? { ...t, status, reason: reason ?? t.reason } : t
-      )
-      dispatch(setTransactions(updated))
-    })
+    socket.on(
+      'transaction:status_changed',
+      ({ transactionId, status, reason }) => {
+        const updated = transactions.map((t) =>
+          t.id === transactionId
+            ? { ...t, status, reason: reason ?? t.reason }
+            : t,
+        );
+        // dispatch(setTransactions(updated));
+      },
+    );
 
     socket.on('alert:new', () => {
-      dispatch(setHasNewAlert(true))
-    })
+      dispatch(setHasNewAlert(true));
+    });
 
     return () => {
-      socket.disconnect()
-    }
-  }, [token, sessionId, dispatch, transactions])
+      socket.disconnect();
+    };
+  }, [token, sessionId, dispatch, transactions]);
 
   const loadData = async () => {
     try {
       const [bal, txns] = await Promise.all([
         api.getBalance(),
-        api.getTransactions({ limit: 10 }),
-      ])
-      dispatch(setBalance(bal))
-      dispatch(setTransactions(txns))
+        // api.getTransactions({ limit: 10 }),
+      ]);
+      dispatch(setBalance(bal));
+      // dispatch(setTransactions(txns));
     } catch (err) {
-      console.error('Failed to load dashboard data:', err)
+      console.error('Failed to load dashboard data:', err);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleCopyPhone = () => {
-    if (!user?.phoneNumber) return
-    navigator.clipboard.writeText(user.phoneNumber)
-    setCopiedPhone(true)
-    setTimeout(() => setCopiedPhone(false), 2000)
-  }
+    if (!user?.phoneNumber) return;
+    navigator.clipboard.writeText(user.phoneNumber);
+    setCopiedPhone(true);
+    setTimeout(() => setCopiedPhone(false), 2000);
+  };
 
   const services = [
     {
@@ -198,45 +270,47 @@ export default function Dashboard() {
       bg: 'bg-purple-50 hover:bg-purple-100 border-purple-100/80',
       action: () => setShowQrModal(true),
     },
-  ]
+  ];
 
   const getTransactionIcon = (type) => {
     switch (type) {
       case 'send':
-        return <SendIcon size={18} color="#8A0F13" />
+        return <SendIcon size={18} color="#8A0F13" />;
       case 'receive':
       case 'cash_in':
-        return <ReceiveIcon size={18} color="#059669" />
+        return <ReceiveIcon size={18} color="#059669" />;
       case 'cash_out':
-        return <CashOutIcon size={18} color="#D97706" />
+        return <CashOutIcon size={18} color="#D97706" />;
       case 'pay_bill':
-        return <PayBillIcon size={18} color="#059669" />
+        return <PayBillIcon size={18} color="#059669" />;
       case 'buy_goods':
-        return <BuyGoodsIcon size={18} color="#E11D48" />
+        return <BuyGoodsIcon size={18} color="#E11D48" />;
       default:
-        return <HistoryIcon size={18} color="#6B7280" />
+        return <HistoryIcon size={18} color="#6B7280" />;
     }
-  }
+  };
 
   const getAmountDisplay = (txn) => {
-    const isOutgoing = ['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(txn.type)
-    const prefix = isOutgoing ? '−' : '+'
-    const color = isOutgoing ? 'text-neutral-900' : 'text-green-700'
-    return { prefix, color }
-  }
+    const isOutgoing = ['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(
+      txn.type,
+    );
+    const prefix = isOutgoing ? '−' : '+';
+    const color = isOutgoing ? 'text-neutral-900' : 'text-green-700';
+    return { prefix, color };
+  };
 
   const formatTime = (dateStr) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffHrs < 1) return 'Just now'
-    if (diffHrs < 24) return `${diffHrs}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-  }
+    if (diffHrs < 1) return 'Just now';
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
 
   if (isLoading) {
     return (
@@ -246,7 +320,10 @@ export default function Dashboard() {
             <div className="h-56 bg-white rounded-3xl border border-neutral-200 animate-pulse p-6" />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-24 bg-white rounded-2xl border border-neutral-200 animate-pulse" />
+                <div
+                  key={i}
+                  className="h-24 bg-white rounded-2xl border border-neutral-200 animate-pulse"
+                />
               ))}
             </div>
           </div>
@@ -255,8 +332,16 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-    )
+    );
   }
+
+  //get transaction from the database
+
+  // user details from useSelector
+
+  // const { user: userState } = useSelector((state) => state.dashboard);
+
+  // console.log('userState', userState)
 
   return (
     <div className="page-container animate-fade-in">
@@ -271,7 +356,13 @@ export default function Dashboard() {
             />
           ) : (
             <div className="w-12 h-12 rounded-full bg-primary-800 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
-              {user?.fullName ? user.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'KM'}
+              {user?.fullName
+                ? user.fullName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .slice(0, 2)
+                : 'KM'}
             </div>
           )}
           <div>
@@ -285,7 +376,8 @@ export default function Dashboard() {
               </span>
             </div>
             <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-              Welcome back to your mobile money wallet. All security defenses and fraud models are active.
+              Welcome back to your mobile money wallet. All security defenses
+              and fraud models are active.
             </p>
           </div>
         </div>
@@ -314,8 +406,12 @@ export default function Dashboard() {
                   className="w-8 h-8 sm:w-9 sm:h-9 object-contain"
                 />
                 <div>
-                  <p className="text-[11px] sm:text-xs font-bold tracking-wider text-red-100 uppercase">SWIPE PAY WALLET</p>
-                  <p className="text-[10px] sm:text-[11px] text-white/70">Main Active Account</p>
+                  <p className="text-[11px] sm:text-xs font-bold tracking-wider text-red-100 uppercase">
+                    SWIPE PAY WALLET
+                  </p>
+                  <p className="text-[10px] sm:text-[11px] text-white/70">
+                    Main Active Account
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -328,12 +424,26 @@ export default function Dashboard() {
                   aria-label={showBalance ? 'Hide balance' : 'Show balance'}
                 >
                   {showBalance ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M12 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
                   ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
                       <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
@@ -344,9 +454,14 @@ export default function Dashboard() {
 
             {/* Balance Display */}
             <div className="my-2 sm:my-3">
-              <p className="text-[11px] sm:text-xs text-red-200 font-medium uppercase tracking-wide">Available Balance</p>
+              <p className="text-[11px] sm:text-xs text-red-200 font-medium uppercase tracking-wide">
+                Available Balance
+              </p>
               <p className="text-3xl sm:text-5xl font-black tracking-tight font-mono mt-1 text-white">
-                {showBalance ? formatCurrency(balance?.available ?? 0) : 'GH₵ ••••••'}
+                {/* userState?.balance ||  */}
+                {userState?.balance || showBalance
+                  ? formatCurrency(balance?.available ?? 0)
+                  : 'GH₵ ••••••'}
               </p>
             </div>
 
@@ -357,17 +472,25 @@ export default function Dashboard() {
                   onClick={handleCopyPhone}
                   className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors group"
                 >
-                  <span className="font-mono text-xs sm:text-sm font-semibold">{user?.phoneNumber ?? '+233 24 123 4567'}</span>
+                  <span className="font-mono text-xs sm:text-sm font-semibold">
+                    {user?.phoneNumber ?? '+233 24 123 4567'}
+                  </span>
                   {copiedPhone ? (
                     <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-green-300 font-bold bg-green-950/80 px-2 py-0.5 rounded">
                       <CheckIcon size={12} color="#86efac" /> Copied
                     </span>
                   ) : (
-                    <CopyIcon size={14} color="#fca5a5" className="group-hover:text-white transition-colors" />
+                    <CopyIcon
+                      size={14}
+                      color="#fca5a5"
+                      className="group-hover:text-white transition-colors"
+                    />
                   )}
                 </button>
                 <span className="text-white/40 hidden sm:inline">•</span>
-                <span className="text-[11px] sm:text-xs text-white/70">Daily Limit: GH₵ 20k/day</span>
+                <span className="text-[11px] sm:text-xs text-white/70">
+                  Daily Limit: GH₵ 20k/day
+                </span>
               </div>
 
               <div className="flex items-center">
@@ -386,8 +509,12 @@ export default function Dashboard() {
           <div className="bg-white rounded-3xl p-4 sm:p-5 border border-neutral-200 shadow-xs">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-xs sm:text-sm font-bold text-neutral-900 tracking-tight">Quick Operations</h2>
-                <p className="text-[10px] sm:text-[11px] text-neutral-400">Transfers, Cash Out, Cash In, and utility bills</p>
+                <h2 className="text-xs sm:text-sm font-bold text-neutral-900 tracking-tight">
+                  Quick Operations
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-neutral-400">
+                  Transfers, Cash Out, Cash In, and utility bills
+                </p>
               </div>
               <span className="text-[9px] sm:text-[10px] font-bold bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full uppercase">
                 Services
@@ -401,7 +528,9 @@ export default function Dashboard() {
                   onClick={service.action}
                   className="flex items-center gap-3 p-3 sm:p-3.5 rounded-2xl bg-neutral-50/70 border border-neutral-200/70 hover:bg-white hover:border-neutral-300 hover:shadow-xs active:scale-95 transition-all text-left group cursor-pointer"
                 >
-                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105 ${service.bg}`}>
+                  <div
+                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105 ${service.bg}`}
+                  >
                     {service.icon}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -426,30 +555,97 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold text-neutral-900">Auto-Detected Physical Location</h3>
-                    <span className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${(currentLocation?.country === 'Ghana' || ['Sunyani', 'Accra', 'Tema', 'Kumasi', 'Takoradi', 'Tamale', 'Cape Coast', 'Koforidua', 'Ho', 'Wa', 'Bolgatanga', 'Techiman'].includes(currentLocation?.city ?? ''))
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 text-amber-800 border-amber-200'
-                      }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${(currentLocation?.country === 'Ghana' || ['Sunyani', 'Accra', 'Tema', 'Kumasi', 'Takoradi', 'Tamale', 'Cape Coast', 'Koforidua', 'Ho', 'Wa', 'Bolgatanga', 'Techiman'].includes(currentLocation?.city ?? '')) ? 'bg-emerald-500' : 'bg-amber-500'
-                        } animate-pulse`} />
-                      {(currentLocation?.country === 'Ghana' || ['Sunyani', 'Accra', 'Tema', 'Kumasi', 'Takoradi', 'Tamale', 'Cape Coast', 'Koforidua', 'Ho', 'Wa', 'Bolgatanga', 'Techiman'].includes(currentLocation?.city ?? '')) ? 'Safe Trusted Zone' : 'Anomalous Location'}
+                    <h3 className="text-sm font-bold text-neutral-900">
+                      Auto-Detected Physical Location
+                    </h3>
+                    <span
+                      className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                        currentLocation?.country === 'Ghana' ||
+                        [
+                          'Sunyani',
+                          'Accra',
+                          'Tema',
+                          'Kumasi',
+                          'Takoradi',
+                          'Tamale',
+                          'Cape Coast',
+                          'Koforidua',
+                          'Ho',
+                          'Wa',
+                          'Bolgatanga',
+                          'Techiman',
+                        ].includes(currentLocation?.city ?? '')
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          currentLocation?.country === 'Ghana' ||
+                          [
+                            'Sunyani',
+                            'Accra',
+                            'Tema',
+                            'Kumasi',
+                            'Takoradi',
+                            'Tamale',
+                            'Cape Coast',
+                            'Koforidua',
+                            'Ho',
+                            'Wa',
+                            'Bolgatanga',
+                            'Techiman',
+                          ].includes(currentLocation?.city ?? '')
+                            ? 'bg-emerald-500'
+                            : 'bg-amber-500'
+                        } animate-pulse`}
+                      />
+                      {currentLocation?.country === 'Ghana' ||
+                      [
+                        'Sunyani',
+                        'Accra',
+                        'Tema',
+                        'Kumasi',
+                        'Takoradi',
+                        'Tamale',
+                        'Cape Coast',
+                        'Koforidua',
+                        'Ho',
+                        'Wa',
+                        'Bolgatanga',
+                        'Techiman',
+                      ].includes(currentLocation?.city ?? '')
+                        ? 'Safe Trusted Zone'
+                        : 'Anomalous Location'}
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded-full">
-                      {currentLocation?.source === 'gps' ? 'Hardware GPS' : 'Network IP'}
-                      {currentLocation?.accuracy ? ` (+/-${currentLocation.accuracy}m)` : ''}
+                      {currentLocation?.source === 'gps'
+                        ? 'Hardware GPS'
+                        : 'Network IP'}
+                      {currentLocation?.accuracy
+                        ? ` (+/-${currentLocation.accuracy}m)`
+                        : ''}
                     </span>
                   </div>
                   <p className="text-xs text-neutral-600 mt-1 font-medium">
-                    <strong className="text-neutral-900">{currentLocation?.city || 'Detecting...'}</strong>{currentLocation?.region ? `, ${currentLocation.region}` : ''} ({currentLocation?.country || 'Ghana'})
-                    {currentLocation?.latitude && currentLocation?.longitude && (
-                      <span className="text-neutral-400 font-mono text-[11px] ml-2">
-                        ({currentLocation.latitude.toFixed(4)}° N, {currentLocation.longitude.toFixed(4)}° W)
-                      </span>
-                    )}
+                    <strong className="text-neutral-900">
+                      {currentLocation?.city || 'Detecting...'}
+                    </strong>
+                    {currentLocation?.region
+                      ? `, ${currentLocation.region}`
+                      : ''}{' '}
+                    ({currentLocation?.country || 'Ghana'})
+                    {currentLocation?.latitude &&
+                      currentLocation?.longitude && (
+                        <span className="text-neutral-400 font-mono text-[11px] ml-2">
+                          ({currentLocation.latitude.toFixed(4)}° N,{' '}
+                          {currentLocation.longitude.toFixed(4)}° W)
+                        </span>
+                      )}
                   </p>
                   <p className="text-[11px] text-neutral-400 mt-0.5">
-                    Physical device location captured where the platform was opened. AI Geofencing defense active.
+                    Physical device location captured where the platform was
+                    opened. AI Geofencing defense active.
                   </p>
                 </div>
               </div>
@@ -467,7 +663,9 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <LocationPinIcon size={14} color="#8A0F13" />
                   <p className="text-primary-950 font-medium">
-                    Allow physical browser location access to automatically pinpoint your exact physical location{currentLocation?.city ? ` (${currentLocation.city})` : ''}.
+                    Allow physical browser location access to automatically
+                    pinpoint your exact physical location
+                    {currentLocation?.city ? ` (${currentLocation.city})` : ''}.
                   </p>
                 </div>
                 <button
@@ -487,7 +685,9 @@ export default function Dashboard() {
           <div className="bg-white rounded-3xl p-5 sm:p-6 border border-neutral-200 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-neutral-900 tracking-tight">Recent Activity</h2>
+                <h2 className="text-sm font-bold text-neutral-900 tracking-tight">
+                  Recent Activity
+                </h2>
                 <span className="px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded-full text-[10px] font-bold">
                   {transactions.length}
                 </span>
@@ -505,7 +705,9 @@ export default function Dashboard() {
                 <div className="mb-2 text-neutral-300">
                   <EmptyBoxIcon size={40} />
                 </div>
-                <p className="text-neutral-700 font-bold text-xs">No activity yet</p>
+                <p className="text-neutral-700 font-bold text-xs">
+                  No activity yet
+                </p>
                 <p className="text-neutral-400 text-[11px] mt-0.5">
                   Your transactions will appear here instantly.
                 </p>
@@ -513,7 +715,7 @@ export default function Dashboard() {
             ) : (
               <div className="divide-y divide-neutral-100">
                 {transactions.slice(0, 6).map((txn) => {
-                  const { prefix, color } = getAmountDisplay(txn)
+                  const { prefix, color } = getAmountDisplay(txn);
                   return (
                     <div
                       key={txn.id}
@@ -533,17 +735,23 @@ export default function Dashboard() {
                           )}
                         </div>
                         <p className="text-[11px] text-neutral-500 truncate">
-                          {txn.receiverName || txn.receiver || 'Swipe Pay'} • {formatTime(txn.createdAt)}
+                          {txn.receiverName || txn.receiver || 'Swipe Pay'} •{' '}
+                          {formatTime(txn.createdAt)}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className={`text-xs sm:text-sm font-black font-mono ${color}`}>
-                          {prefix}{formatCurrency(txn.amount)}
+                        <p
+                          className={`text-xs sm:text-sm font-black font-mono ${color}`}
+                        >
+                          {prefix}
+                          {formatCurrency(txn.amount)}
                         </p>
-                        <p className="text-[10px] text-neutral-400 uppercase">GHS</p>
+                        <p className="text-[10px] text-neutral-400 uppercase">
+                          GHS
+                        </p>
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             )}
@@ -551,22 +759,29 @@ export default function Dashboard() {
 
           {/* Account Security Overview Widget */}
           <div className="bg-white rounded-3xl p-5 border border-neutral-200 shadow-xs space-y-3">
-            <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">Account Credentials</h3>
+            <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+              Account Credentials
+            </h3>
 
             <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200/60 text-xs space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-neutral-500">KYC Status:</span>
                 <span className="font-bold text-emerald-700 flex items-center gap-1">
-                  <ShieldCheckIcon size={13} color="#059669" /> Verified (Level 2)
+                  <ShieldCheckIcon size={13} color="#059669" /> Verified (Level
+                  2)
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-neutral-500">Ghana Card:</span>
-                <span className="font-mono font-bold text-neutral-800">GHA-•••••481-2</span>
+                <span className="font-mono font-bold text-neutral-800">
+                  GHA-•••••481-2
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-neutral-500">Biometric 2FA:</span>
-                <span className="font-semibold text-neutral-800">Facial Scan Enabled</span>
+                <span className="font-semibold text-neutral-800">
+                  Facial Scan Enabled
+                </span>
               </div>
             </div>
           </div>
@@ -582,7 +797,9 @@ export default function Dashboard() {
                 <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs">
                   <QrCodeIcon size={18} color="#7C3AED" />
                 </div>
-                <h3 className="text-sm font-bold text-neutral-900">My Receive QR Code</h3>
+                <h3 className="text-sm font-bold text-neutral-900">
+                  My Receive QR Code
+                </h3>
               </div>
               <button
                 onClick={() => setShowQrModal(false)}
@@ -593,7 +810,8 @@ export default function Dashboard() {
             </div>
 
             <p className="text-xs text-neutral-500">
-              Show this QR code to anyone to receive instant money transfers into your wallet.
+              Show this QR code to anyone to receive instant money transfers
+              into your wallet.
             </p>
 
             {/* QR Code container */}
@@ -605,7 +823,9 @@ export default function Dashboard() {
             </div>
 
             <div>
-              <p className="text-xs text-neutral-400 font-bold uppercase tracking-wider">Your MoMo Number</p>
+              <p className="text-xs text-neutral-400 font-bold uppercase tracking-wider">
+                Your MoMo Number
+              </p>
               <p className="text-xl font-black font-mono text-neutral-900 mt-0.5">
                 {user?.phoneNumber ?? '024 123 4567'}
               </p>
@@ -642,17 +862,23 @@ export default function Dashboard() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export async function loader({ request, params } = {}) {
   try {
-    const response = await axios.get("https://machine-learning-server-ohnz.onrender.com/user", {
-      withCredentials: true,
-    })
+    const response = await axios.get(
+      // 'https://machine-learning-server-ohnz.onrender.com/user',
+
+      'http://localhost:5000/user',
+      {
+        withCredentials: true,
+      },
+    );
+
+    console.log('responeded value', response.data);
     return response.data ?? null;
-  }
-  catch (error) {
+  } catch (error) {
     console.log(error);
     return null;
   }

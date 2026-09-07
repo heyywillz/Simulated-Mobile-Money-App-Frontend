@@ -1,12 +1,19 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import PinPad from './PinPad'
-import { StatusBadge } from './StatusBadge'
-import BiometricModal from './BiometricModal'
-import { formatCurrency } from '@momo/shared/src/constants'
-import { ShieldCheckIcon, CheckIcon, SparklesIcon, FingerprintIcon } from '@momo/shared/src/components/Icons'
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import PinPad from './PinPad';
+import { StatusBadge } from './StatusBadge';
+import BiometricModal from './BiometricModal';
+import { formatCurrency } from '@momo/shared/src/constants';
+import {
+  ShieldCheckIcon,
+  CheckIcon,
+  SparklesIcon,
+  FingerprintIcon,
+} from '@momo/shared/src/components/Icons';
+import { useAppSelector } from '../store/hooks';
+import axios from 'axios';
 
-const PRESET_AMOUNTS = [10, 20, 50, 100, 200, 500]
+const PRESET_AMOUNTS = [10, 20, 50, 100, 200, 500];
 
 export default function TransactionFlow({
   type,
@@ -15,116 +22,176 @@ export default function TransactionFlow({
   fields,
   onSubmit,
 }) {
-  const navigate = useNavigate()
-  const [step, setStep] = useState('input')
-  const [formData, setFormData] = useState({})
-  const [amount, setAmount] = useState('')
-  const [currentPin, setCurrentPin] = useState('')
-  const [error, setError] = useState(null)
-  const [result, setResult] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [stepUpAttempts, setStepUpAttempts] = useState(0)
+  const navigate = useNavigate();
+  const [step, setStep] = useState('input');
+  const [formData, setFormData] = useState({});
+  const [amount, setAmount] = useState('');
+  const [currentPin, setCurrentPin] = useState('');
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [stepUpAttempts, setStepUpAttempts] = useState(0);
 
   // Biometric Modal State
-  const [isBioModalOpen, setIsBioModalOpen] = useState(false)
-  const [bioModalMode, setBioModalMode] = useState('facial')
-  const [bioModalTitle, setBioModalTitle] = useState('Biometric Authorization')
-  const [bioModalSubtitle, setBioModalSubtitle] = useState('Authorize this payment with biometrics')
+  const [isBioModalOpen, setIsBioModalOpen] = useState(false);
+  const [bioModalMode, setBioModalMode] = useState('facial');
+  const [bioModalTitle, setBioModalTitle] = useState('Biometric Authorization');
+  const [bioModalSubtitle, setBioModalSubtitle] = useState(
+    'Authorize this payment with biometrics',
+  );
 
-  const parsedAmount = parseFloat(amount) || 0
+  const parsedAmount = parseFloat(amount) || 0;
 
   const handleInputSubmit = (e) => {
-    e.preventDefault()
+    e.preventDefault();
     if (parsedAmount <= 0) {
-      setError('Please enter a valid amount')
-      return
+      setError('Please enter a valid amount');
+      return;
     }
-    setError(null)
-    setStep('pin')
-  }
+    setError(null);
+    setStep('pin');
+  };
 
   // Step 1: User completes PIN -> Trigger mandatory Layer 2 Biometric Authorization
   const handlePinComplete = (enteredPin) => {
-    setCurrentPin(enteredPin)
-    setError(null)
-    setBioModalMode('facial')
-    setBioModalTitle('Layer 2 Security Check: Biometric Authorization')
-    setBioModalSubtitle(`Verify your identity via Face ID or Fingerprint to release GH₵ ${parsedAmount.toFixed(2)}`)
-    setIsBioModalOpen(true)
+    setCurrentPin(enteredPin);
+    setError(null);
+    setBioModalMode('facial');
+    setBioModalTitle('Layer 2 Security Check: Biometric Authorization');
+    setBioModalSubtitle(
+      `Verify your identity via Face ID or Fingerprint to release GH₵ ${parsedAmount.toFixed(2)}`,
+    );
+    setIsBioModalOpen(true);
+
+    PostTransaction();
+  };
+
+  const { currentLocation, deviceProfile } = useAppSelector(
+    (state) => state.telemetry,
+  );
+
+  const { transactions } = useAppSelector((state) => state.transactions);
+
+  const currentTransaction = transactions[transactions.length - 1];
+
+  const { amount: money, sender, receiver } = currentTransaction;
+
+  const all_useful_inputs = {
+    amount: money,
+    SenderPhone: `233-${sender.slice(1).split('').join('')}`,
+    receiverPhone: `233-${receiver.slice(1).split('').join('')}`,
+    location: {
+      lat: currentLocation.latitude,
+      long: currentLocation.longitude,
+    },
+    device: deviceProfile.deviceName,
+  };
+
+  console.log('hello', all_useful_inputs);
+
+  async function PostTransaction() {
+    try {
+      const response = await axios.post(
+        'http://localhost:5000/transaction',
+        all_useful_inputs,
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+      console.log('response', response, response.data);
+    } catch (error) {
+      console.log('error', error);
+    }
   }
 
   // Open Direct Biometric on PIN Pad if clicked explicitly
   const openDirectBiometric = (mode) => {
-    setBioModalMode(mode)
-    setBioModalTitle('Layer 2 Security Check: Biometric Authorization')
-    setBioModalSubtitle(`Authorize GH₵ ${parsedAmount.toFixed(2)} with ${mode === 'facial' ? 'Face ID' : 'Fingerprint'}`)
-    setIsBioModalOpen(true)
-  }
+    setBioModalMode(mode);
+    setBioModalTitle('Layer 2 Security Check: Biometric Authorization');
+    setBioModalSubtitle(
+      `Authorize GH₵ ${parsedAmount.toFixed(2)} with ${mode === 'facial' ? 'Face ID' : 'Fingerprint'}`,
+    );
+    setIsBioModalOpen(true);
+  };
 
   // Open Step-Up Biometric
   const openStepUpBiometric = (mode) => {
-    setBioModalMode(mode)
-    setBioModalTitle('Security Challenge: Step-Up Biometric Check')
-    setBioModalSubtitle('Verify your identity to release this flagged transaction')
-    setIsBioModalOpen(true)
-  }
+    setBioModalMode(mode);
+    setBioModalTitle('Security Challenge: Step-Up Biometric Check');
+    setBioModalSubtitle(
+      'Verify your identity to release this flagged transaction',
+    );
+    setIsBioModalOpen(true);
+  };
 
   // Handle Biometric Verification Success
   const handleBiometricSuccess = async (method) => {
-    setIsBioModalOpen(false)
-    setStep('processing')
-    setIsLoading(true)
-    setError(null)
+    setIsBioModalOpen(false);
+    setStep('processing');
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const layers = ['pin', method]
-      const response = await onSubmit(formData, parsedAmount, layers, currentPin)
-      setResult(response)
+      const layers = ['pin', method];
+      const response = await onSubmit(
+        formData,
+        parsedAmount,
+        layers,
+        currentPin,
+      );
+      setResult(response);
 
       if (response.status === 'flagged' || response.status === 'under_review') {
-        setStep('step_up_prompt')
+        setStep('step_up_prompt');
       } else {
-        setStep('result')
+        setStep('result');
       }
     } catch (err) {
-      const errorMsg = err.response?.data?.error ?? 'Transaction failed'
-      if (err.response?.status === 401 || errorMsg.toLowerCase().includes('pin')) {
-        setError(errorMsg)
-        setStep('pin')
+      const errorMsg = err.response?.data?.error ?? 'Transaction failed';
+      if (
+        err.response?.status === 401 ||
+        errorMsg.toLowerCase().includes('pin')
+      ) {
+        setError(errorMsg);
+        setStep('pin');
       } else {
-        setError(errorMsg)
-        setStep('result')
+        setError(errorMsg);
+        setStep('result');
         setResult({
           transactionId: '',
           status: 'blocked',
           reason: errorMsg,
-        })
+        });
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleBiometricFailure = () => {
-    const attempts = stepUpAttempts + 1
-    setStepUpAttempts(attempts)
+    const attempts = stepUpAttempts + 1;
+    setStepUpAttempts(attempts);
     if (attempts >= 2) {
       setResult({
         transactionId: result?.transactionId || `tx_${Date.now()}`,
         status: 'blocked',
-        reason: 'Failed second-factor biometric verification twice. Account protected.',
-        caseId: result?.caseId || `CASE-${Math.floor(1000 + Math.random() * 9000)}`,
-      })
-      setIsBioModalOpen(false)
-      setStep('result')
+        reason:
+          'Failed second-factor biometric verification twice. Account protected.',
+        caseId:
+          result?.caseId || `CASE-${Math.floor(1000 + Math.random() * 9000)}`,
+      });
+      setIsBioModalOpen(false);
+      setStep('result');
     } else {
-      setError('Biometric scan mismatch. 1 attempt remaining.')
+      setError('Biometric scan mismatch. 1 attempt remaining.');
     }
-  }
+  };
 
-  const isSuccess = result?.status === 'completed'
-  const isFlagged = result?.status === 'flagged' || result?.status === 'under_review'
-  const isBlocked = result?.status === 'blocked'
+  const isSuccess = result?.status === 'completed';
+  const isFlagged =
+    result?.status === 'flagged' || result?.status === 'under_review';
+  const isBlocked = result?.status === 'blocked';
 
   return (
     <div className="page-container animate-fade-in max-w-4xl mx-auto">
@@ -148,12 +215,24 @@ export default function TransactionFlow({
             className="w-10 h-10 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-center hover:bg-neutral-100 transition-colors text-neutral-700"
             aria-label="Back"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
             </svg>
           </button>
           <div>
-            <h1 className="text-lg font-black text-neutral-900 tracking-tight">{title}</h1>
+            <h1 className="text-lg font-black text-neutral-900 tracking-tight">
+              {title}
+            </h1>
             <p className="text-xs text-neutral-500 font-medium">{subtitle}</p>
           </div>
         </div>
@@ -164,11 +243,20 @@ export default function TransactionFlow({
 
       {/* Step 1: Input */}
       {step === 'input' && (
-        <form onSubmit={handleInputSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        <form
+          onSubmit={handleInputSubmit}
+          className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start"
+        >
           <div className="md:col-span-7 space-y-4">
             {fields.map((field) => (
-              <div key={field.id} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs">
-                <label htmlFor={field.id} className="block text-xs font-bold text-neutral-700 mb-2 uppercase tracking-wide">
+              <div
+                key={field.id}
+                className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs"
+              >
+                <label
+                  htmlFor={field.id}
+                  className="block text-xs font-bold text-neutral-700 mb-2 uppercase tracking-wide"
+                >
                   {field.label}
                 </label>
                 <div className="relative">
@@ -181,7 +269,9 @@ export default function TransactionFlow({
                     id={field.id}
                     type={field.type ?? 'text'}
                     value={formData[field.id] ?? ''}
-                    onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, [field.id]: e.target.value })
+                    }
                     placeholder={field.placeholder}
                     className={`input-field ${field.prefix ? 'pl-14' : ''} text-sm font-semibold`}
                   />
@@ -190,7 +280,10 @@ export default function TransactionFlow({
             ))}
 
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs">
-              <label htmlFor="amount-input" className="block text-xs font-bold text-neutral-700 mb-2 uppercase tracking-wide">
+              <label
+                htmlFor="amount-input"
+                className="block text-xs font-bold text-neutral-700 mb-2 uppercase tracking-wide"
+              >
                 Transfer Amount
               </label>
               <div className="relative mb-3">
@@ -201,7 +294,10 @@ export default function TransactionFlow({
                   id="amount-input"
                   type="number"
                   value={amount}
-                  onChange={(e) => { setAmount(e.target.value); setError(null) }}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    setError(null);
+                  }}
                   placeholder="0.00"
                   className="input-field pl-16 text-3xl font-black font-mono tracking-tight"
                   step="0.01"
@@ -216,7 +312,10 @@ export default function TransactionFlow({
                   <button
                     key={preset}
                     type="button"
-                    onClick={() => { setAmount(preset.toString()); setError(null) }}
+                    onClick={() => {
+                      setAmount(preset.toString());
+                      setError(null);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
                       parsedAmount === preset
                         ? 'bg-primary-800 text-white'
@@ -246,31 +345,45 @@ export default function TransactionFlow({
 
           {/* Right Column: Transaction Summary */}
           <div className="md:col-span-5 bg-white p-6 rounded-3xl border border-neutral-200 shadow-xs space-y-4">
-            <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Debit Breakdown</h3>
+            <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
+              Debit Breakdown
+            </h3>
             <div className="space-y-3 text-xs">
               <div className="flex justify-between">
                 <span className="text-neutral-500">Principal Amount</span>
-                <span className="font-mono font-bold text-neutral-900">{formatCurrency(parsedAmount)}</span>
+                <span className="font-mono font-bold text-neutral-900">
+                  {formatCurrency(parsedAmount)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-500">E-Levy Fee (0%)</span>
-                <span className="font-mono font-bold text-green-700">GH₵ 0.00</span>
+                <span className="font-mono font-bold text-green-700">
+                  GH₵ 0.00
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-500">Network Fee</span>
-                <span className="font-mono font-bold text-green-700">GH₵ 0.00</span>
+                <span className="font-mono font-bold text-green-700">
+                  GH₵ 0.00
+                </span>
               </div>
               <div className="pt-3 border-t border-neutral-100 flex justify-between items-baseline">
                 <span className="font-bold text-neutral-900">Total Debit</span>
-                <span className="font-mono text-xl font-black text-primary-800">{formatCurrency(parsedAmount)}</span>
+                <span className="font-mono text-xl font-black text-primary-800">
+                  {formatCurrency(parsedAmount)}
+                </span>
               </div>
             </div>
 
             <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200/60 text-[11px] text-neutral-500 space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-neutral-800">
-                <SparklesIcon size={14} color="#8A0F13" /> Real-time Fraud Scoring
+                <SparklesIcon size={14} color="#8A0F13" /> Real-time Fraud
+                Scoring
               </div>
-              <p>Outgoing transfers are monitored in real-time by the AI Defense Engine.</p>
+              <p>
+                Outgoing transfers are monitored in real-time by the AI Defense
+                Engine.
+              </p>
             </div>
           </div>
         </form>
@@ -284,9 +397,16 @@ export default function TransactionFlow({
               <ShieldCheckIcon size={13} color="#8A0F13" />
               <span>Multi-Factor Security: Step 1 of 2</span>
             </div>
-            <p className="text-3xl font-black text-neutral-900 mt-1 font-mono">{formatCurrency(parsedAmount)}</p>
+            <p className="text-3xl font-black text-neutral-900 mt-1 font-mono">
+              {formatCurrency(parsedAmount)}
+            </p>
             {formData.receiver && (
-              <p className="text-xs text-neutral-500 font-medium mt-1">Recipient: <span className="font-mono font-bold text-neutral-800">{formData.receiver}</span></p>
+              <p className="text-xs text-neutral-500 font-medium mt-1">
+                Recipient:{' '}
+                <span className="font-mono font-bold text-neutral-800">
+                  {formData.receiver}
+                </span>
+              </p>
             )}
           </div>
           <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-xs space-y-4">
@@ -306,7 +426,14 @@ export default function TransactionFlow({
                   onClick={() => openDirectBiometric('facial')}
                   className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-neutral-700 hover:text-primary-800 rounded-lg hover:bg-neutral-50 border border-neutral-200 transition-colors shadow-2xs"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2.2">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#8A0F13"
+                    strokeWidth="2.2"
+                  >
                     <circle cx="12" cy="12" r="10" />
                     <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                   </svg>
@@ -337,8 +464,12 @@ export default function TransactionFlow({
               </div>
             </div>
           </div>
-          <p className="text-base font-black text-neutral-900">Securing Transaction</p>
-          <p className="text-xs text-neutral-500 mt-1">Evaluating telemetry & biometric risk models...</p>
+          <p className="text-base font-black text-neutral-900">
+            Securing Transaction
+          </p>
+          <p className="text-xs text-neutral-500 mt-1">
+            Evaluating telemetry & biometric risk models...
+          </p>
         </div>
       )}
 
@@ -353,12 +484,19 @@ export default function TransactionFlow({
             Step-Up Biometric Required
           </span>
 
-          <h2 className="text-lg font-black text-neutral-900 mb-2">Security Challenge Triggered</h2>
+          <h2 className="text-lg font-black text-neutral-900 mb-2">
+            Security Challenge Triggered
+          </h2>
           <p className="text-xs text-neutral-600 mb-5 leading-relaxed">
-            {result?.reason ?? 'An unusual transaction pattern or amount was detected. Complete biometric authentication to release this transfer.'}
+            {result?.reason ??
+              'An unusual transaction pattern or amount was detected. Complete biometric authentication to release this transfer.'}
           </p>
 
-          {error && <p className="text-xs text-primary-800 font-semibold mb-4 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">{error}</p>}
+          {error && (
+            <p className="text-xs text-primary-800 font-semibold mb-4 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+              {error}
+            </p>
+          )}
 
           <div className="w-full space-y-2.5">
             {/* Primary: Face ID */}
@@ -366,7 +504,14 @@ export default function TransactionFlow({
               onClick={() => openStepUpBiometric('facial')}
               className="btn-primary w-full flex items-center justify-center gap-2 py-3.5 text-xs font-bold"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                 <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="2.5" />
@@ -399,7 +544,14 @@ export default function TransactionFlow({
                   style={{
                     left: `${10 + Math.random() * 80}%`,
                     top: `${10 + Math.random() * 30}%`,
-                    backgroundColor: ['#8A0F13', '#D97706', '#059669', '#4F46E5', '#E11D48', '#7C3AED'][i % 6],
+                    backgroundColor: [
+                      '#8A0F13',
+                      '#D97706',
+                      '#059669',
+                      '#4F46E5',
+                      '#E11D48',
+                      '#7C3AED',
+                    ][i % 6],
                     animationDelay: `${i * 0.1}s`,
                     animationDuration: `${1.2 + Math.random() * 0.8}s`,
                   }}
@@ -422,8 +574,18 @@ export default function TransactionFlow({
               )}
               {isBlocked && (
                 <div className="w-16 h-16 rounded-full bg-red-50 border-2 border-red-200 flex items-center justify-center">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#8A0F13"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </div>
               )}
@@ -440,26 +602,35 @@ export default function TransactionFlow({
             </p>
 
             <p className="text-xs text-neutral-500 mb-6 max-w-sm mx-auto">
-              {result.reason ?? (isSuccess ? 'The recipient has been credited immediately.' : 'Security review in progress.')}
+              {result.reason ??
+                (isSuccess
+                  ? 'The recipient has been credited immediately.'
+                  : 'Security review in progress.')}
             </p>
 
             <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200/60 text-xs space-y-2.5 text-left mb-6">
               {result.transactionId && (
                 <div className="flex justify-between items-center">
                   <span className="text-neutral-500">Transaction ID:</span>
-                  <span className="font-mono font-bold text-neutral-800 text-[11px] truncate max-w-[180px]">{result.transactionId}</span>
+                  <span className="font-mono font-bold text-neutral-800 text-[11px] truncate max-w-[180px]">
+                    {result.transactionId}
+                  </span>
                 </div>
               )}
               {formData.receiver && (
                 <div className="flex justify-between items-center">
                   <span className="text-neutral-500">Recipient:</span>
-                  <span className="font-mono font-bold text-neutral-800">{formData.receiver}</span>
+                  <span className="font-mono font-bold text-neutral-800">
+                    {formData.receiver}
+                  </span>
                 </div>
               )}
               {formData.receiverName && (
                 <div className="flex justify-between items-center">
                   <span className="text-neutral-500">Recipient Name:</span>
-                  <span className="font-bold text-neutral-800">{formData.receiverName}</span>
+                  <span className="font-bold text-neutral-800">
+                    {formData.receiverName}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between items-center">
@@ -468,7 +639,9 @@ export default function TransactionFlow({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-neutral-500">Timestamp:</span>
-                <span className="font-medium text-neutral-700">{new Date().toLocaleString('en-GB')}</span>
+                <span className="font-medium text-neutral-700">
+                  {new Date().toLocaleString('en-GB')}
+                </span>
               </div>
             </div>
 
@@ -490,5 +663,5 @@ export default function TransactionFlow({
         </div>
       )}
     </div>
-  )
+  );
 }
