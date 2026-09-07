@@ -130,7 +130,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: 'onboarding',
+        index: 'onboarding',
         element: (
           <PublicRoute>
             <Onboarding />

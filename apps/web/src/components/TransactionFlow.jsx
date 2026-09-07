@@ -53,18 +53,6 @@ export default function TransactionFlow({
   };
 
   // Step 1: User completes PIN -> Trigger mandatory Layer 2 Biometric Authorization
-  const handlePinComplete = (enteredPin) => {
-    setCurrentPin(enteredPin);
-    setError(null);
-    setBioModalMode('facial');
-    setBioModalTitle('Layer 2 Security Check: Biometric Authorization');
-    setBioModalSubtitle(
-      `Verify your identity via Face ID or Fingerprint to release GH₵ ${parsedAmount.toFixed(2)}`,
-    );
-    setIsBioModalOpen(true);
-
-    PostTransaction();
-  };
 
   const { currentLocation, deviceProfile } = useAppSelector(
     (state) => state.telemetry,
@@ -72,24 +60,41 @@ export default function TransactionFlow({
 
   const { transactions } = useAppSelector((state) => state.transactions);
 
-  const currentTransaction = transactions[transactions.length - 1];
+  // const { amount: money, sender, receiver } = currentTransaction;
+  const handlePinComplete = (enteredPin) => {
+    PostTransaction();
+    setCurrentPin(enteredPin);
+    setError(null);
+    setBioModalMode('facial');
+    setBioModalTitle('Layer 2 Security Check: Biometric Authorization');
+    setBioModalSubtitle(
+      `Verify your identity via Face ID or Fingerprint to release GH₵ ${parsedAmount.toFixed(2)}`,
+    );
 
-  const { amount: money, sender, receiver } = currentTransaction;
-
-  const all_useful_inputs = {
-    amount: money,
-    SenderPhone: `233-${sender.slice(1).split('').join('')}`,
-    receiverPhone: `233-${receiver.slice(1).split('').join('')}`,
-    location: {
-      lat: currentLocation.latitude,
-      long: currentLocation.longitude,
-    },
-    device: deviceProfile.deviceName,
+    setIsBioModalOpen(true);
   };
 
-  console.log('hello', all_useful_inputs);
-
   async function PostTransaction() {
+    console.log('formData', formData);
+    const currentTransaction = transactions[transactions.length - 1];
+
+    const money = amount || currentTransaction?.amount || 100;
+    const sender =
+      formData.receiver || currentTransaction?.sender || '0248490032';
+    const receiver =
+      formData.receiver || currentTransaction?.receiver || '0542512341';
+    const all_useful_inputs = {
+      amount: money,
+      SenderPhone: `233-${sender.slice(1).split('').join('')}`,
+      receiverPhone: `233-${receiver.slice(1).split('').join('')}`,
+      location: {
+        lat: currentLocation.latitude,
+        long: currentLocation.longitude,
+      },
+      device: deviceProfile.deviceName,
+    };
+
+    console.log('hello', all_useful_inputs);
     try {
       const response = await axios.post(
         'http://localhost:5000/transaction',

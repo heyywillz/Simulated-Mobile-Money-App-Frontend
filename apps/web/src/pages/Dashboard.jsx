@@ -104,7 +104,9 @@ export default function Dashboard() {
           { params: { page: 1, limit: 10 } },
           { withCredentials: true },
         );
-        dispatch(setTransactions(usersTransactions?.data));
+
+        // dispatching value
+        // dispatch(setTransactions(usersTransactions?.data));
         console.log(
           'users transactions',
           usersTransactions,
