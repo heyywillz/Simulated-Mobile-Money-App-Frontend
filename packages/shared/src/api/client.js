@@ -1,11 +1,11 @@
 /**
  * API client for the hosted Express backend.
- * Base URL: https://machine-learning-server-ohnz.onrender.com
+ * Base URL: https://machine-learning-server-3.onrender.com
  */
 
 import axios from 'axios';
 
-const EXPRESS_BASE_URL = 'https://machine-learning-server-ohnz.onrender.com';
+const EXPRESS_BASE_URL = 'https://machine-learning-server-3.onrender.com';
 
 let authToken = null;
 

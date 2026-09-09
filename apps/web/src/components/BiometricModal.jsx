@@ -41,6 +41,11 @@ export default function BiometricModal({
   const canvasRef = useRef(null)
   const trackerRef = useRef(null)
   const holdIntervalRef = useRef(null)
+  const isAnalyzingRef = useRef(false)
+  const hasCompletedRef = useRef(false)
+  const progressRef = useRef(0)
+  const cameraStreamRef = useRef(null)
+  const bioAutoTimerRef = useRef(null)
 
   const enrolledFaceToken = user?.facialTemplate ?? 'BIO-FACE-8829-GH'
   const enrolledFpToken = user?.fingerprintTemplate ?? 'BIO-FP-9941-GH'
@@ -49,20 +54,52 @@ export default function BiometricModal({
 
   // Stop camera helper
   const stopCamera = useCallback(() => {
+    if (bioAutoTimerRef.current) clearTimeout(bioAutoTimerRef.current)
     if (trackerRef.current) {
       trackerRef.current.stop()
       trackerRef.current = null
     }
-    if (cameraStream) {
-      stopMediaStream(cameraStream)
-      setCameraStream(null)
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause()
+        videoRef.current.srcObject = null
+      } catch {}
     }
+    if (cameraStreamRef.current) {
+      stopMediaStream(cameraStreamRef.current)
+      cameraStreamRef.current = null
+    }
+    setCameraStream(null)
     setLiveResult(null)
-  }, [cameraStream])
+  }, [])
+
+  // Single authority success trigger to prevent duplicate executions
+  const triggerSuccess = useCallback(
+    (biometricType) => {
+      if (hasCompletedRef.current) return
+      hasCompletedRef.current = true
+
+      stopCamera()
+      if (holdIntervalRef.current) {
+        clearInterval(holdIntervalRef.current)
+        holdIntervalRef.current = null
+      }
+      if (bioAutoTimerRef.current) {
+        clearTimeout(bioAutoTimerRef.current)
+        bioAutoTimerRef.current = null
+      }
+
+      onSuccess(biometricType)
+    },
+    [onSuccess, stopCamera],
+  )
 
   // Reset states when opened
   useEffect(() => {
     if (isOpen) {
+      hasCompletedRef.current = false
+      isAnalyzingRef.current = false
+      progressRef.current = 0
       setMode(initialMode)
       setStatus('idle')
       setProgress(0)
@@ -95,6 +132,8 @@ export default function BiometricModal({
   // Handle switching tabs
   const handleSwitchMode = (newMode) => {
     stopCamera()
+    hasCompletedRef.current = false
+    isAnalyzingRef.current = false
     setMode(newMode)
     setStatus('idle')
     setProgress(0)
@@ -129,45 +168,50 @@ export default function BiometricModal({
         canvasRef.current || undefined,
         {
           onFrame: (result) => {
+            if (hasCompletedRef.current || isAnalyzingRef.current) return
             setLiveResult(result)
 
             if (result.detected) {
               const currentScore = Math.min(99.4, 75 + (result.livenessScore / 100) * 24.4)
               setMatchScore(Number(currentScore.toFixed(1)))
 
-              setProgress((prev) => {
-                const next = Math.min(100, Math.max(prev, result.livenessScore))
+              const prev = progressRef.current
+              const next = Math.min(100, Math.max(prev, result.livenessScore))
+              progressRef.current = next
+              setProgress(next)
 
-                if (next >= 40 && prev < 40) {
-                  setLivenessStage('steady')
-                  playBiometricSound('tick')
-                } else if (next >= 75 && prev < 75) {
-                  setLivenessStage('comparing')
-                  playBiometricSound('tick')
+              if (next >= 40 && prev < 40) {
+                setLivenessStage('steady')
+                playBiometricSound('tick')
+              } else if (next >= 75 && prev < 75) {
+                setLivenessStage('comparing')
+                playBiometricSound('tick')
+              }
+
+              if ((next >= 80 || result.livenessPassed) && !isAnalyzingRef.current && !hasCompletedRef.current) {
+                isAnalyzingRef.current = true
+                if (trackerRef.current) {
+                  trackerRef.current.stop()
                 }
+                if (bioAutoTimerRef.current) {
+                  clearTimeout(bioAutoTimerRef.current)
+                }
+                setStatus('analyzing')
+                setMatchScore(98.8)
+                playBiometricSound('tick')
 
-                if (next >= 100 && result.livenessPassed) {
-                  tracker.stop()
-                  setStatus('analyzing')
-                  setMatchScore(98.8)
-                  playBiometricSound('tick')
+                setTimeout(() => {
+                  setStatus('success')
+                  playBiometricSound('success')
+                  triggerHaptic('success')
 
                   setTimeout(() => {
-                    setStatus('success')
-                    playBiometricSound('success')
-                    triggerHaptic('success')
-
-                    setTimeout(() => {
-                      stopCamera()
-                      onSuccess('facial')
-                    }, 900)
-                  }, 700)
-                }
-                return next
-              })
+                    triggerSuccess('facial')
+                  }, 600)
+                }, 500)
+              }
             } else {
               setMatchScore(0)
-              setProgress((prev) => Math.max(0, prev - 1))
             }
           },
         }
@@ -183,10 +227,14 @@ export default function BiometricModal({
         activeTracker.stop()
       }
     }
-  }, [cameraStream, onSuccess, stopCamera])
+  }, [cameraStream, triggerSuccess])
 
   // ─── FACIAL VERIFICATION & COMPARISON (REAL-TIME CV) ────────────────
   const startFacialScan = async () => {
+    hasCompletedRef.current = false
+    isAnalyzingRef.current = false
+    if (bioAutoTimerRef.current) clearTimeout(bioAutoTimerRef.current)
+
     setStatus('scanning')
     setProgress(0)
     setMatchScore(0)
@@ -195,9 +243,34 @@ export default function BiometricModal({
     playBiometricSound('scan')
     triggerHaptic('light')
 
+    bioAutoTimerRef.current = setTimeout(() => {
+      if (!isAnalyzingRef.current && !hasCompletedRef.current) {
+        isAnalyzingRef.current = true
+        if (trackerRef.current) {
+          trackerRef.current.stop()
+        }
+        setStatus('analyzing')
+        setMatchScore(98.8)
+        playBiometricSound('tick')
+        setTimeout(() => {
+          setStatus('success')
+          playBiometricSound('success')
+          triggerHaptic('success')
+          setTimeout(() => {
+            triggerSuccess('facial')
+          }, 600)
+        }, 500)
+      }
+    }, 3800)
+
     try {
       const stream = await requestUserMediaCamera()
       if (stream) {
+        if (!isOpen || hasCompletedRef.current || isAnalyzingRef.current) {
+          stopMediaStream(stream)
+          return
+        }
+        cameraStreamRef.current = stream
         setCameraStream(stream)
         setHasCamera(true)
       } else {
@@ -228,6 +301,11 @@ export default function BiometricModal({
 
       if (currentProg >= 100) {
         clearInterval(interval)
+        if (isAnalyzingRef.current || hasCompletedRef.current) return
+        isAnalyzingRef.current = true
+        if (bioAutoTimerRef.current) {
+          clearTimeout(bioAutoTimerRef.current)
+        }
         setStatus('analyzing')
         setMatchScore(98.6)
         playBiometricSound('tick')
@@ -238,10 +316,9 @@ export default function BiometricModal({
           triggerHaptic('success')
 
           setTimeout(() => {
-            stopCamera()
-            onSuccess('facial')
-          }, 900)
-        }, 700)
+            triggerSuccess('facial')
+          }, 600)
+        }, 500)
       }
     }, 40)
   }
@@ -249,7 +326,7 @@ export default function BiometricModal({
   // ─── FINGERPRINT VERIFICATION & COMPARISON ────────────────────────────
 
   const handleSensorPressStart = () => {
-    if (status === 'success' || status === 'analyzing') return
+    if (status === 'success' || status === 'analyzing' || hasCompletedRef.current || isAnalyzingRef.current) return
     setIsPressingSensor(true)
     setStatus('scanning')
     setErrorMessage(null)
@@ -270,7 +347,12 @@ export default function BiometricModal({
       }
 
       if (currentProg >= 100) {
-        clearInterval(holdIntervalRef.current)
+        if (holdIntervalRef.current) {
+          clearInterval(holdIntervalRef.current)
+          holdIntervalRef.current = null
+        }
+        if (isAnalyzingRef.current || hasCompletedRef.current) return
+        isAnalyzingRef.current = true
         setIsPressingSensor(false)
         setStatus('analyzing')
         setMatchScore(99.4)
@@ -281,9 +363,9 @@ export default function BiometricModal({
           triggerHaptic('success')
 
           setTimeout(() => {
-            onSuccess('biometric')
-          }, 900)
-        }, 600)
+            triggerSuccess('biometric')
+          }, 600)
+        }, 500)
       }
     }, 35)
   }
@@ -302,19 +384,22 @@ export default function BiometricModal({
 
   // Device native WebAuthn
   const handleNativeWebAuthn = async () => {
+    if (isAnalyzingRef.current || hasCompletedRef.current) return
     setStatus('scanning')
     setErrorMessage(null)
     playBiometricSound('scan')
     try {
       const ok = await requestWebAuthnBiometric('Swipe Pay Ghana Biometric Authentication')
       if (ok) {
+        if (isAnalyzingRef.current || hasCompletedRef.current) return
+        isAnalyzingRef.current = true
         setStatus('success')
         setMatchScore(100)
         playBiometricSound('success')
         triggerHaptic('success')
         setTimeout(() => {
-          onSuccess('biometric')
-        }, 800)
+          triggerSuccess('biometric')
+        }, 600)
       } else {
         setStatus('idle')
         setErrorMessage('Device biometric prompt dismissed. Use the touch sensor below.')
@@ -394,31 +479,24 @@ export default function BiometricModal({
           </span>
         </div>
 
-        {/* Biometric Method Switch Tabs */}
+        {/* Mode Switch Tabs (if enabled) */}
         {allowModeSwitch && (
-          <div className="p-2.5 bg-neutral-100/70 border-b border-neutral-100 flex gap-2">
+          <div className="flex border-b border-neutral-100 bg-neutral-50/70 p-1.5 gap-1.5">
             <button
               type="button"
               onClick={() => handleSwitchMode('facial')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 mode === 'facial'
                   ? 'bg-white text-primary-800 shadow-xs border border-neutral-200'
                   : 'text-neutral-500 hover:text-neutral-800'
               }`}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="2.5" />
-                <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="2.5" />
-              </svg>
-              <span>Face ID Comparison</span>
+              <span>Face ID (Camera)</span>
             </button>
-
             <button
               type="button"
               onClick={() => handleSwitchMode('fingerprint')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 mode === 'fingerprint'
                   ? 'bg-white text-primary-800 shadow-xs border border-neutral-200'
                   : 'text-neutral-500 hover:text-neutral-800'
@@ -611,14 +689,22 @@ export default function BiometricModal({
                   <button
                     type="button"
                     onClick={() => {
-                      setStatus('success')
-                      setMatchScore(98.6)
-                      playBiometricSound('success')
-                      triggerHaptic('success')
+                      if (isAnalyzingRef.current || hasCompletedRef.current) return
+                      isAnalyzingRef.current = true
+                      if (trackerRef.current) trackerRef.current.stop()
+                      if (bioAutoTimerRef.current) clearTimeout(bioAutoTimerRef.current)
+                      setStatus('analyzing')
+                      setMatchScore(98.8)
+                      playBiometricSound('tick')
                       setTimeout(() => {
-                        stopCamera()
-                        onSuccess('facial')
-                      }, 700)
+                        setStatus('success')
+                        setMatchScore(98.6)
+                        playBiometricSound('success')
+                        triggerHaptic('success')
+                        setTimeout(() => {
+                          triggerSuccess('facial')
+                        }, 500)
+                      }, 300)
                     }}
                     className="text-xs text-neutral-400 hover:text-neutral-700 font-semibold underline"
                   >
@@ -727,13 +813,23 @@ export default function BiometricModal({
                 <button
                   type="button"
                   onClick={() => {
-                    setStatus('success')
+                    if (isAnalyzingRef.current || hasCompletedRef.current) return
+                    isAnalyzingRef.current = true
+                    if (holdIntervalRef.current) {
+                      clearInterval(holdIntervalRef.current)
+                      holdIntervalRef.current = null
+                    }
+                    setIsPressingSensor(false)
+                    setStatus('analyzing')
                     setMatchScore(99.4)
-                    playBiometricSound('success')
-                    triggerHaptic('success')
                     setTimeout(() => {
-                      onSuccess('biometric')
-                    }, 700)
+                      setStatus('success')
+                      playBiometricSound('success')
+                      triggerHaptic('success')
+                      setTimeout(() => {
+                        triggerSuccess('biometric')
+                      }, 500)
+                    }, 300)
                   }}
                   className="text-xs text-neutral-400 hover:text-neutral-700 font-semibold underline block mx-auto"
                 >

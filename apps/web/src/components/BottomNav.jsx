@@ -8,7 +8,7 @@ import {
 } from '@momo/shared/src/components/Icons'
 
 const NAV_ITEMS = [
-  { label: 'Home', icon: HomeIcon, route: '/' },
+  { label: 'Home', icon: HomeIcon, route: '/dashboard' },
   { label: 'History', icon: HistoryIcon, route: '/transactions' },
   { label: 'Alerts', icon: BellIcon, route: '/notifications' },
   { label: 'Profile', icon: UserIcon, route: '/profile' },

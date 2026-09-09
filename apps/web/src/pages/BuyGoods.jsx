@@ -16,13 +16,14 @@ export default function BuyGoods() {
         { id: 'receiver', label: 'Merchant or till number', placeholder: 'Enter merchant code' },
         { id: 'receiverName', label: 'Merchant name (optional)', placeholder: 'e.g. ShopRite Accra' },
       ]}
-      onSubmit={async (data, amount, authLayers = ['pin'], pin) => {
+      onSubmit={async (data, amount, authLayers = ['password'], password) => {
         const location = await captureLocation()
         return api.buyGoods({
           amount,
           receiver: data.receiver,
           receiverName: data.receiverName,
-          pin,
+          pin: password,
+          password,
           deviceProfile,
           location,
           authLayersPassed: authLayers,

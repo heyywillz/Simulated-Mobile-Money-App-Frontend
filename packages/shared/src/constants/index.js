@@ -88,7 +88,9 @@ export function formatCurrency(amount, currency) {
 
 export const ERRORS = {
   NETWORK: 'Unable to connect. Please check your network and try again.',
-  INVALID_PIN: 'Incorrect PIN. Please try again.',
+  INVALID_PASSWORD: 'Incorrect Password. Please try again.',
+  INVALID_PIN: 'Incorrect Password. Please try again.',
+  PASSWORD_LOCKED: 'Too many failed attempts. Your account has been temporarily locked.',
   PIN_LOCKED: 'Too many failed attempts. Your account has been temporarily locked.',
   BIOMETRIC_FAILED: 'Biometric verification failed. Please try again.',
   FACIAL_FAILED: 'Facial verification could not be completed.',
@@ -124,7 +126,9 @@ export const DETECTION_TYPE_LABELS = {
   transaction_anomaly: 'Transaction anomaly',
 };
 
-// ─── PIN config ─────────────────────────────────────────────────
+// ─── Password config ────────────────────────────────────────────
 
+export const PASSWORD_LENGTH = 6;
+export const MAX_PASSWORD_ATTEMPTS = 3;
 export const PIN_LENGTH = 6;
 export const MAX_PIN_ATTEMPTS = 3;

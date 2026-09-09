@@ -179,53 +179,119 @@ export async function requestWebAuthnBiometric(promptText = 'Authorize with Fing
   }
 }
 
-// Camera feed management with multi-tier progressive constraints
+// Global active camera stream tracker to prevent orphan webcams from staying on
+const activeMediaStreams = new Set();
+
+export function registerActiveStream(stream) {
+  if (stream && typeof stream.getTracks === 'function') {
+    activeMediaStreams.add(stream);
+  }
+}
+
+export function stopMediaStream(stream) {
+  if (!stream) return;
+  try {
+    if (typeof stream.getTracks === 'function') {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch {}
+      });
+    }
+  } catch {}
+  activeMediaStreams.delete(stream);
+}
+
+export function stopAllMediaStreams() {
+  activeMediaStreams.forEach((stream) => {
+    try {
+      if (typeof stream.getTracks === 'function') {
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+            track.enabled = false;
+          } catch {}
+        });
+      }
+    } catch {}
+  });
+  activeMediaStreams.clear();
+}
+
+// Camera feed management with multi-tier progressive constraints and safety timeout
 export async function requestUserMediaCamera() {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
     console.warn('[Camera] navigator.mediaDevices.getUserMedia not available in this environment');
     return null;
   }
 
-  // Tier 1: User-facing with ideal resolution
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: 'user',
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-      },
-      audio: false,
-    });
-    return stream;
-  } catch (err) {
-    console.warn('[Camera] Tier 1 facingMode:user constraint failed, trying generic resolution:', err);
-  }
+  let isCancelledOrTimedOut = false;
 
-  // Tier 2: Generic camera with ideal resolution
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-      },
-      audio: false,
-    });
-    return stream;
-  } catch (err) {
-    console.warn('[Camera] Tier 2 generic resolution failed, trying minimal constraints:', err);
-  }
+  const cameraPromise = (async () => {
+    let stream = null;
+    // Tier 1: User-facing with ideal resolution
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+        audio: false,
+      });
+    } catch (err) {
+      console.warn('[Camera] Tier 1 facingMode:user constraint failed, trying generic resolution:', err);
+    }
 
-  // Tier 3: Basic video: true (universal fallback)
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: false,
-    });
+    // Tier 2: Generic camera with ideal resolution
+    if (!stream) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
+        });
+      } catch (err) {
+        console.warn('[Camera] Tier 2 generic resolution failed, trying minimal constraints:', err);
+      }
+    }
+
+    // Tier 3: Basic video: true (universal fallback)
+    if (!stream) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      } catch (err) {
+        console.warn('[Camera] Tier 3 basic video failed. No camera available or permission denied:', err);
+        return null;
+      }
+    }
+
+    if (!stream) return null;
+
+    if (isCancelledOrTimedOut) {
+      // Hardware opened after timeout/cancellation; stop immediately to release camera
+      stopMediaStream(stream);
+      return null;
+    }
+
+    registerActiveStream(stream);
     return stream;
-  } catch (err) {
-    console.warn('[Camera] Tier 3 basic video failed. No camera available or permission denied:', err);
-    return null;
-  }
+  })();
+
+  const timeoutPromise = new Promise((resolve) => {
+    setTimeout(() => {
+      isCancelledOrTimedOut = true;
+      resolve(null);
+    }, 4000);
+  });
+
+  return Promise.race([cameraPromise, timeoutPromise]);
 }
 
 /**
@@ -263,16 +329,5 @@ export async function attachStreamToVideo(video, stream) {
   } catch (err) {
     console.error('[Camera] Failed to attach stream to video:', err);
     return false;
-  }
-}
-
-export function stopMediaStream(stream) {
-  if (!stream) return;
-  try {
-    stream.getTracks().forEach((track) => {
-      track.stop();
-    });
-  } catch {
-    // Ignore
   }
 }

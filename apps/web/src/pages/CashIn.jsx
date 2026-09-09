@@ -62,7 +62,7 @@ export default function CashIn() {
         receiverName: sourceLabel,
         deviceProfile,
         location,
-        authLayersPassed: ['pin'],
+        authLayersPassed: ['password'],
       })
 
       setReceipt(response)
@@ -82,7 +82,7 @@ export default function CashIn() {
       <div className="mb-6 flex items-center justify-between bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="w-10 h-10 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-center hover:bg-neutral-100 transition-colors text-neutral-700 md:hidden"
             aria-label="Back"
           >
@@ -370,7 +370,7 @@ export default function CashIn() {
               <button
                 onClick={() => {
                   setShowSuccessModal(false)
-                  navigate('/')
+                  navigate('/dashboard')
                 }}
                 className="btn-primary w-full py-3 text-sm font-bold"
               >

@@ -7,7 +7,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import { useLoaderData, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge, MlScoreBadge } from '../components/StatusBadge';
 import {
   formatCurrency,
   TRANSACTION_TYPE_LABELS,
@@ -43,8 +43,10 @@ import {
   addTransaction,
   setHasNewAlert,
 } from '../store';
-import axios from 'axios';
+import { simEvents } from '@momo/shared/src/api/store';
 import { useDispatch, useSelector } from 'react-redux';
+
+const DEFAULT_BALANCE = { available: 10000, ledger: 10000, currency: 'GHS' };
 
 export default function Dashboard() {
   const {
@@ -62,17 +64,15 @@ export default function Dashboard() {
   const data = useLoaderData();
 
   const balance = useAppSelector(
-    (state) =>
-      state.wallet?.balance ?? {
-        available: 5000,
-        ledger: 5000,
-        currency: 'GHS',
-      },
+    (state) => state.wallet?.balance ?? DEFAULT_BALANCE,
   );
 
   const { user: userState } = useAppSelector((state) => state.dashboard);
-
-  console.log('userState', userState);
+  const storedUser =
+    typeof localStorage !== 'undefined'
+      ? JSON.parse(localStorage.getItem('momo_sim_user') || 'null')
+      : null;
+  const activeUser = userState || user || storedUser;
   const showBalance = useAppSelector(
     (state) => state.wallet?.showBalance ?? true,
   );
@@ -99,28 +99,15 @@ export default function Dashboard() {
   useEffect(() => {
     async function getAllTransactions() {
       try {
-        const usersTransactions = await axios.get(
-          'http://localhost:5000/transaction/user',
-          { params: { page: 1, limit: 10 } },
-          { withCredentials: true },
-        );
-
-        // dispatching value
-        // dispatch(setTransactions(usersTransactions?.data));
-        console.log(
-          'users transactions',
-          usersTransactions,
-          usersTransactions?.data,
-        );
-        // const { transactions } = useAppSelector((state) => state.transactions);
-        // useAppDispatch(setTransactions(usersTransactions?.data));
-        // useDispatch(setTransactions(usersTransactions?.data));
+        const localTxns = await api.getTransactions({ limit: 10 });
+        dispatch(setTransactions(Array.isArray(localTxns) ? localTxns : []));
       } catch (error) {
-        console.log('error', error?.message || error);
+        console.warn('Failed to load transactions:', error);
+        dispatch(setTransactions([]));
       }
     }
     getAllTransactions();
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     if (data) {
@@ -135,42 +122,27 @@ export default function Dashboard() {
 
   // Sync authenticated user to the dashboard Redux slice
   useEffect(() => {
+    if (user) {
+      dispatcher(loginUser(user));
+    } else if (storedUser && !userState) {
+      dispatcher(loginUser(storedUser));
+    }
+  }, [user, storedUser, dispatcher]);
+
+  useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await axios.get(
-          // 'https://machine-learning-server-ohnz.onrender.com/user',
-          'http://localhost:5000/user',
-          {
-            withCredentials: true,
-          },
-        );
-        console.log('user response', res);
-        if (res?.data) {
-          dispatcher(loginUser(res.data));
+        // Use local sim store — no backend server needed
+        const localUser = await api.getCurrentUser();
+        if (localUser && (localUser.fullName || localUser.id)) {
+          dispatcher(loginUser(localUser));
         }
       } catch (error) {
-        console.log(error?.message);
+        // Sim store unavailable — ignore
       }
     }
     fetchUser();
-  }, []);
-
-  // Server ping / health check on mount
-  // useEffect(() => {
-  //   const checkServer = async () => {
-  //     try {
-  //       const res = await axios.get(
-  //         // 'https://machine-learning-server-ohnz.onrender.com',
-
-  //         'http://localhost:5000/user',
-  //       );
-  //       console.log('Server response:', res.data);
-  //     } catch (error) {
-  //       console.log('Server check error:', error?.message);
-  //     }
-  //   };
-  //   checkServer();
-  // }, []);
+  }, [dispatcher]);
 
   // Live Socket.io Sync
   useEffect(() => {
@@ -207,14 +179,40 @@ export default function Dashboard() {
     };
   }, [token, sessionId, dispatch, transactions]);
 
+  // Live SimStore local event sync for instant reflection of new transactions
+  useEffect(() => {
+    const handleNewTx = (newTx) => {
+      if (newTx) {
+        dispatch(addTransaction(newTx));
+      }
+    };
+    simEvents.on('transaction:updated', handleNewTx);
+
+    const onCustomEvent = (e) => {
+      if (e.detail) dispatch(addTransaction(e.detail));
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('momo_sim:transaction:updated', onCustomEvent);
+    }
+
+    return () => {
+      simEvents.off('transaction:updated', handleNewTx);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('momo_sim:transaction:updated', onCustomEvent);
+      }
+    };
+  }, [dispatch]);
+
   const loadData = async () => {
     try {
       const [bal, txns] = await Promise.all([
         api.getBalance(),
-        // api.getTransactions({ limit: 10 }),
+        api.getTransactions({ limit: 10 }),
       ]);
       dispatch(setBalance(bal));
-      // dispatch(setTransactions(txns));
+      if (Array.isArray(txns) && txns.length > 0) {
+        dispatch(setTransactions(txns));
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     } finally {
@@ -223,8 +221,9 @@ export default function Dashboard() {
   };
 
   const handleCopyPhone = () => {
-    if (!user?.phoneNumber) return;
-    navigator.clipboard.writeText(user.phoneNumber);
+    const phoneToCopy = activeUser?.phoneNumber || user?.phoneNumber;
+    if (!phoneToCopy) return;
+    navigator.clipboard.writeText(phoneToCopy);
     setCopiedPhone(true);
     setTimeout(() => setCopiedPhone(false), 2000);
   };
@@ -350,27 +349,29 @@ export default function Dashboard() {
       {/* Top Welcome Header: Hi, Username */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-white p-5 sm:p-6 rounded-3xl border border-neutral-200/80 shadow-xs">
         <div className="flex items-center gap-3.5">
-          {user?.profilePicture ? (
+          {activeUser?.profilePicture ? (
             <img
-              src={user.profilePicture}
-              alt={user.fullName}
+              src={activeUser.profilePicture}
+              alt={activeUser.fullName || 'User'}
               className="w-12 h-12 rounded-full object-cover border-2 border-primary-800 shadow-sm shrink-0"
             />
           ) : (
             <div className="w-12 h-12 rounded-full bg-primary-800 text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
-              {user?.fullName
-                ? user.fullName
+              {activeUser?.fullName
+                ? activeUser.fullName
                     .split(' ')
+                    .filter(Boolean)
                     .map((n) => n[0])
                     .join('')
                     .slice(0, 2)
-                : 'KM'}
+                    .toUpperCase()
+                : 'SP'}
             </div>
           )}
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-extrabold text-neutral-900 tracking-tight">
-                Hi, {user?.fullName || 'Kwame Mensah'}
+                Hi, {activeUser?.fullName || 'User'}
               </h1>
               <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -462,7 +463,7 @@ export default function Dashboard() {
               <p className="text-3xl sm:text-5xl font-black tracking-tight font-mono mt-1 text-white">
                 {/* userState?.balance ||  */}
                 {userState?.balance || showBalance
-                  ? formatCurrency(balance?.available ?? 0)
+                  ? formatCurrency(balance?.available ?? 10000)
                   : 'GH₵ ••••••'}
               </p>
             </div>
@@ -475,7 +476,7 @@ export default function Dashboard() {
                   className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors group"
                 >
                   <span className="font-mono text-xs sm:text-sm font-semibold">
-                    {user?.phoneNumber ?? '+233 24 123 4567'}
+                    {activeUser?.phoneNumber ?? '+233 24 123 4567'}
                   </span>
                   {copiedPhone ? (
                     <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-green-300 font-bold bg-green-950/80 px-2 py-0.5 rounded">
@@ -735,6 +736,9 @@ export default function Dashboard() {
                           {txn.status !== 'completed' && (
                             <StatusBadge status={txn.status} />
                           )}
+                          {txn.mlScore != null && (
+                            <MlScoreBadge score={txn.mlScore} riskLevel={txn.mlRiskLevel} />
+                          )}
                         </div>
                         <p className="text-[11px] text-neutral-500 truncate">
                           {txn.receiverName || txn.receiver || 'Swipe Pay'} •{' '}
@@ -776,7 +780,9 @@ export default function Dashboard() {
               <div className="flex justify-between items-center">
                 <span className="text-neutral-500">Ghana Card:</span>
                 <span className="font-mono font-bold text-neutral-800">
-                  GHA-•••••481-2
+                  {activeUser?.ghanaCardId
+                    ? `${activeUser.ghanaCardId.slice(0, 4)}•••••${activeUser.ghanaCardId.slice(-3)}`
+                    : 'GHA-•••••481-2'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -869,19 +875,11 @@ export default function Dashboard() {
 
 export async function loader({ request, params } = {}) {
   try {
-    const response = await axios.get(
-      // 'https://machine-learning-server-ohnz.onrender.com/user',
-
-      'http://localhost:5000/user',
-      {
-        withCredentials: true,
-      },
-    );
-
-    console.log('responeded value', response.data);
-    return response.data ?? null;
+    // Use local sim store — no backend server needed
+    const user = await api.getCurrentUser();
+    return user ?? null;
   } catch (error) {
-    console.log(error);
+    console.warn('Dashboard loader: could not load user:', error);
     return null;
   }
 }

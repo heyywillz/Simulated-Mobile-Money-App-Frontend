@@ -51,6 +51,7 @@ export default function Login() {
 
     setIsLoading(true)
 
+    sessionStorage.removeItem('momo_facial_verified')
     sessionStorage.setItem('pending_biometric_type', biometricType)
 
     const result = await login({
@@ -63,12 +64,8 @@ export default function Login() {
     setIsLoading(false)
 
     if (result.success) {
-      // Proceed to the selected biometric verification layer
-      if (biometricType === 'facial') {
-        navigate('/verify/facial?type=facial')
-      } else {
-        navigate('/verify/facial?type=fingerprint')
-      }
+      // Proceed to the facial liveness verification layer
+      navigate('/verify/facial?type=facial')
     } else {
       setError(result.error ?? 'Invalid email, Ghana Card, or password.')
     }
@@ -100,7 +97,7 @@ export default function Login() {
                 AI-Protected Financial Gateway
               </h2>
               <p className="text-xs text-red-100 leading-relaxed">
-                Protected by National Identity verification, dual biometric keys (Facial Liveness or Fingerprint), and automated fraud defenses.
+                Protected by National Identity verification, Optical Facial Liveness Scan, and automated fraud defenses.
               </p>
             </div>
 
@@ -113,10 +110,6 @@ export default function Login() {
               <div className="flex items-center gap-2">
                 <FaceScanIcon size={15} color="#fde047" />
                 <span>Optical Face Liveness Scan</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <FingerprintIcon size={15} color="#ffffff" />
-                <span>Hardware Fingerprint Sensor HUD</span>
               </div>
               <div className="flex items-center gap-2">
                 <ZapIcon size={15} color="#93c5fd" />
@@ -202,50 +195,14 @@ export default function Login() {
                 <label className="block text-[10px] font-bold text-neutral-700 mb-1.5 uppercase tracking-wide">
                   Choose Biometric Verification
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setBiometricType('facial')}
-                    className={`p-2.5 rounded-2xl border text-left transition-all flex items-center gap-2.5 ${
-                      biometricType === 'facial'
-                        ? 'border-primary-800 bg-red-50/70 ring-2 ring-primary-800/20'
-                        : 'border-neutral-200 hover:border-neutral-300 bg-white'
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        biometricType === 'facial' ? 'bg-primary-800 text-white' : 'bg-neutral-100 text-neutral-600'
-                      }`}
-                    >
-                      <FaceScanIcon size={16} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-neutral-900 leading-tight">Facial Scan</p>
-                      <p className="text-[10px] text-neutral-500">Live Camera</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setBiometricType('fingerprint')}
-                    className={`p-2.5 rounded-2xl border text-left transition-all flex items-center gap-2.5 ${
-                      biometricType === 'fingerprint'
-                        ? 'border-primary-800 bg-red-50/70 ring-2 ring-primary-800/20'
-                        : 'border-neutral-200 hover:border-neutral-300 bg-white'
-                    }`}
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        biometricType === 'fingerprint' ? 'bg-primary-800 text-white' : 'bg-neutral-100 text-neutral-600'
-                      }`}
-                    >
-                      <FingerprintIcon size={16} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-neutral-900 leading-tight">Fingerprint</p>
-                      <p className="text-[10px] text-neutral-500">Touch Sensor</p>
-                    </div>
-                  </button>
+                <div className="p-3 rounded-2xl border border-primary-800/40 bg-red-50/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary-800 text-white flex items-center justify-center shrink-0">
+                    <FaceScanIcon size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-neutral-900 leading-tight">Facial Liveness Scan (Face ID)</p>
+                    <p className="text-[10px] text-neutral-500">Live Camera Landmark Mesh Matching</p>
+                  </div>
                 </div>
               </div>
 
@@ -267,7 +224,7 @@ export default function Login() {
                   </>
                 ) : (
                   <span>
-                    Proceed to {biometricType === 'facial' ? 'Facial Scan' : 'Fingerprint'} →
+                    Proceed to Facial Scan →
                   </span>
                 )}
               </button>

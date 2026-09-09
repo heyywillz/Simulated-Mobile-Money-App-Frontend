@@ -9,12 +9,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { THEME, FONTS, SHADOWS } from '../theme';
 
 export function PinPad({
-  length = 4,
+  length = 6,
   onComplete,
   onBiometricPress,
   hasBiometrics = false,
-  title = 'Enter MoMo PIN',
-  subtitle = 'Authorize transaction with your 4-digit PIN',
+  title = 'Enter MoMo Password',
+  subtitle = 'Authorize transaction with your 6-digit password',
   error,
   onCancel,
 }) {

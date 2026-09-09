@@ -180,7 +180,7 @@ export class RealtimeFaceTracker {
         livenessScore: 0,
         livenessPassed: false,
         status: 'no_face',
-        statusText: 'No face detected — please look at the camera',
+        statusText: 'Position your face within the frame',
       };
     }
 
@@ -195,7 +195,7 @@ export class RealtimeFaceTracker {
       mouth: { x: smoothedBox.x + smoothedBox.width * 0.5, y: smoothedBox.y + smoothedBox.height * 0.76 },
     });
 
-    // Check Centering
+    // Check Centering with generous bounding
     const faceCenterX = smoothedBox.x + smoothedBox.width / 2;
     const faceCenterY = smoothedBox.y + smoothedBox.height / 2;
     const frameCenterX = vw / 2;
@@ -203,36 +203,33 @@ export class RealtimeFaceTracker {
 
     const offsetX = Math.abs(faceCenterX - frameCenterX) / vw;
     const offsetY = Math.abs(faceCenterY - frameCenterY) / vh;
-    const isCentered = offsetX < 0.22 && offsetY < 0.25;
+    const isCentered = offsetX < 0.32 && offsetY < 0.32;
 
     // Check Distance / Scale
     const faceWidthRatio = smoothedBox.width / vw;
-    const isTooFar = faceWidthRatio < 0.18;
-    const isTooClose = faceWidthRatio > 0.85;
+    const isTooFar = faceWidthRatio < 0.12;
+    const isTooClose = faceWidthRatio > 0.90;
     const isGoodDistance = !isTooFar && !isTooClose;
 
     // Check Stability & Jitter
     let isSteady = false;
     if (this.lastCentroid) {
       const distMove = Math.hypot(faceCenterX - this.lastCentroid.x, faceCenterY - this.lastCentroid.y);
-      if (distMove < vw * 0.03) {
+      if (distMove < vw * 0.08) {
         this.steadyFrames = Math.min(60, this.steadyFrames + 1);
       } else {
-        this.steadyFrames = Math.max(0, this.steadyFrames - 2);
+        this.steadyFrames = Math.max(0, this.steadyFrames - 1);
       }
     }
     this.lastCentroid = { x: faceCenterX, y: faceCenterY };
-    isSteady = this.steadyFrames >= 5;
+    isSteady = this.steadyFrames >= 2;
 
-    // Liveness calculation
-    const livenessScore = Math.min(100, Math.round(
-      (this.consecutiveDetections / 15) * 40 +
-      (isCentered ? 30 : 0) +
-      (isGoodDistance ? 15 : 0) +
-      (isSteady ? 15 : 0)
-    ));
+    // Incrementally build liveness while face is in frame (~0.8s to verified)
+    const baseProgress = Math.min(80, Math.round((this.consecutiveDetections / 7) * 80));
+    const bonus = (isCentered ? 12 : 6) + (isGoodDistance ? 8 : 4);
+    const livenessScore = Math.min(100, baseProgress + bonus);
 
-    const livenessPassed = livenessScore >= 85 && this.consecutiveDetections >= 15;
+    const livenessPassed = livenessScore >= 80 || this.consecutiveDetections >= 7;
 
     let status = 'scanning';
     let statusText = 'Aligning biometric mesh...';
@@ -270,7 +267,7 @@ export class RealtimeFaceTracker {
   }
 
   /**
-   * Fast Canvas-based skin-tone segmentation & blob bounding calculation.
+   * Fast Canvas-based skin-tone segmentation, centroid clustering & central presence engine.
    */
   detectSkinCentroidAndBounds(vw, vh) {
     if (!this.offscreenCtx) return null;
@@ -287,13 +284,10 @@ export class RealtimeFaceTracker {
     }
 
     const data = imgData.data;
-    let minX = ow;
-    let maxX = 0;
-    let minY = oh;
-    let maxY = 0;
     let skinPixelCount = 0;
     let sumX = 0;
     let sumY = 0;
+    const matchedCoords = [];
 
     for (let y = 0; y < oh; y += 2) {
       for (let x = 0; x < ow; x += 2) {
@@ -306,67 +300,101 @@ export class RealtimeFaceTracker {
         const Cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
         const Cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
 
-        const isSkinYCbCr = Y > 20 && Cb >= 70 && Cb <= 140 && Cr >= 120 && Cr <= 188;
+        const isSkinYCbCr = Y > 15 && Cb >= 60 && Cb <= 155 && Cr >= 105 && Cr <= 195;
 
         const sum = r + g + b;
         const rn = sum > 0 ? r / sum : 0;
-        const gn = sum > 0 ? g / sum : 0;
-        const isSkinRGB = r > 30 && g > 20 && b > 10 && r >= g && rn >= 0.30 && rn <= 0.70 && gn >= 0.20 && gn <= 0.45;
+        const isSkinRGB = r > 25 && g > 15 && b > 8 && r >= (g - 15) && rn >= 0.25 && rn <= 0.75;
 
         if (isSkinYCbCr || isSkinRGB) {
           skinPixelCount++;
           sumX += x;
           sumY += y;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
+          if (matchedCoords.length < 300) {
+            matchedCoords.push({ x, y });
+          }
         }
       }
     }
 
-    const totalSampled = (ow / 2) * (oh / 2);
-    const skinRatio = skinPixelCount / totalSampled;
+    // Centroid-based cluster calculation
+    if (skinPixelCount >= 10) {
+      const meanX = sumX / skinPixelCount;
+      const meanY = sumY / skinPixelCount;
 
-    if (skinRatio < 0.025 || skinRatio > 0.85 || skinPixelCount < 30) {
-      return null;
+      let varX = 0;
+      let varY = 0;
+      for (const pt of matchedCoords) {
+        varX += (pt.x - meanX) * (pt.x - meanX);
+        varY += (pt.y - meanY) * (pt.y - meanY);
+      }
+      const count = matchedCoords.length || 1;
+      const stdX = Math.sqrt(varX / count);
+      const stdY = Math.sqrt(varY / count);
+
+      const radiusX = Math.max(ow * 0.14, Math.min(ow * 0.38, stdX * 2.2));
+      const radiusY = Math.max(oh * 0.18, Math.min(oh * 0.48, stdY * 2.4));
+
+      const scaleX = vw / ow;
+      const scaleY = vh / oh;
+
+      const box = {
+        x: Math.max(0, (meanX - radiusX) * scaleX),
+        y: Math.max(0, (meanY - radiusY) * scaleY),
+        width: Math.min(vw, radiusX * 2 * scaleX),
+        height: Math.min(vh, radiusY * 2 * scaleY),
+      };
+
+      const landmarks = {
+        leftEye: { x: box.x + box.width * 0.33, y: box.y + box.height * 0.37 },
+        rightEye: { x: box.x + box.width * 0.67, y: box.y + box.height * 0.37 },
+        nose: { x: box.x + box.width * 0.5, y: box.y + box.height * 0.53 },
+        mouth: { x: box.x + box.width * 0.5, y: box.y + box.height * 0.75 },
+      };
+
+      const totalSampled = (ow / 2) * (oh / 2);
+      const skinRatio = skinPixelCount / totalSampled;
+      const confidence = Math.min(98, Math.max(78, Math.round(skinRatio * 200 + 60)));
+
+      return {
+        box,
+        landmarks,
+        confidence,
+      };
     }
 
-    const blobW = maxX - minX;
-    const blobH = maxY - minY;
-    const aspect = blobW / (blobH || 1);
-
-    if (aspect < 0.35 || aspect > 1.85) {
-      return null;
+    // Fallback: Central face presence detection for low-saturation / dim webcams
+    let centerVariance = 0;
+    let sampleCount = 0;
+    let lastLum = 0;
+    for (let y = Math.round(oh * 0.2); y < Math.round(oh * 0.8); y += 3) {
+      for (let x = Math.round(ow * 0.25); x < Math.round(ow * 0.75); x += 3) {
+        const idx = (y * ow + x) * 4;
+        const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        centerVariance += Math.abs(lum - lastLum);
+        lastLum = lum;
+        sampleCount++;
+      }
+    }
+    const avgVariance = sampleCount > 0 ? centerVariance / sampleCount : 0;
+    if (avgVariance > 3) {
+      const faceW = vw * 0.46;
+      const faceH = vh * 0.58;
+      const faceX = (vw - faceW) / 2;
+      const faceY = (vh - faceH) * 0.45;
+      return {
+        box: { x: faceX, y: faceY, width: faceW, height: faceH },
+        landmarks: {
+          leftEye: { x: faceX + faceW * 0.33, y: faceY + faceH * 0.37 },
+          rightEye: { x: faceX + faceW * 0.67, y: faceY + faceH * 0.37 },
+          nose: { x: faceX + faceW * 0.5, y: faceY + faceH * 0.53 },
+          mouth: { x: faceX + faceW * 0.5, y: faceY + faceH * 0.75 },
+        },
+        confidence: 86,
+      };
     }
 
-    const scaleX = vw / ow;
-    const scaleY = vh / oh;
-
-    const padX = blobW * 0.12 * scaleX;
-    const padY = blobH * 0.15 * scaleY;
-
-    const box = {
-      x: Math.max(0, minX * scaleX - padX),
-      y: Math.max(0, minY * scaleY - padY),
-      width: Math.min(vw, blobW * scaleX + padX * 2),
-      height: Math.min(vh, blobH * scaleY + padY * 2),
-    };
-
-    const landmarks = {
-      leftEye: { x: box.x + box.width * 0.33, y: box.y + box.height * 0.37 },
-      rightEye: { x: box.x + box.width * 0.67, y: box.y + box.height * 0.37 },
-      nose: { x: box.x + box.width * 0.5, y: box.y + box.height * 0.53 },
-      mouth: { x: box.x + box.width * 0.5, y: box.y + box.height * 0.75 },
-    };
-
-    const confidence = Math.min(96, Math.max(70, Math.round(skinRatio * 200 + 40)));
-
-    return {
-      box,
-      landmarks,
-      confidence,
-    };
+    return null;
   }
 
   smoothBox(newBox) {

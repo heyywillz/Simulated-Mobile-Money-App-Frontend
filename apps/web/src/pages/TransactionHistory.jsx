@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge, MlScoreBadge } from '../components/StatusBadge';
 import {
   formatCurrency,
   TRANSACTION_TYPE_LABELS,
@@ -23,7 +23,7 @@ import {
   EmptyBoxIcon,
   CheckIcon,
 } from '@momo/shared/src/components/Icons';
-import axios from 'axios';
+import { simEvents, SimStore } from '@momo/shared/src/api/store';
 
 export default function TransactionHistory() {
   const navigate = useNavigate();
@@ -35,17 +35,54 @@ export default function TransactionHistory() {
 
   useEffect(() => {
     loadTransactions();
+
+    const handleNewTx = (newTx) => {
+      if (!newTx) return;
+      setTransactions((prev) => {
+        const id = newTx.id || newTx._id;
+        if (prev.some((t) => (t.id || t._id) === id)) return prev;
+        return [newTx, ...prev];
+      });
+    };
+
+    simEvents.on('transaction:updated', handleNewTx);
+
+    const onCustomEvent = (e) => {
+      if (e.detail) handleNewTx(e.detail);
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('momo_sim:transaction:updated', onCustomEvent);
+    }
+
+    return () => {
+      simEvents.off('transaction:updated', handleNewTx);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('momo_sim:transaction:updated', onCustomEvent);
+      }
+    };
   }, []);
 
   const loadTransactions = async () => {
+    setIsLoading(true);
     try {
-      // const txns = await api.getTransactions({ limit: 50 })
+      // 1. Fetch latest transactions from client store (all executed client transactions)
+      const localTxns = await api.getTransactions({ limit: 100 });
+      let list = Array.isArray(localTxns) ? [...localTxns] : [];
 
-      const txns = await axios.get('http://localhost:5000/transaction/user');
-      console.log('all_transactions', txns, txns.data);
-      setTransactions(txns?.data);
+      // Local sim store is the sole source of truth — no backend needed
+
+      // Sort newest first
+      list.sort(
+        (a, b) =>
+          new Date(b.createdAt || b.date || 0) -
+          new Date(a.createdAt || a.date || 0),
+      );
+
+      setTransactions(list);
     } catch (err) {
       console.error('Failed to load transactions:', err);
+      const fallback = SimStore.get().getTransactions();
+      setTransactions(fallback);
     } finally {
       setIsLoading(false);
     }
@@ -134,7 +171,7 @@ export default function TransactionHistory() {
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="w-10 h-10 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-center hover:bg-neutral-100 transition-colors text-neutral-700 md:hidden"
             aria-label="Back"
           >
@@ -219,10 +256,14 @@ export default function TransactionHistory() {
             <EmptyBoxIcon size={44} />
           </div>
           <p className="text-neutral-700 font-bold text-sm">
-            No transactions match your search
+            {transactions.length === 0
+              ? 'No transactions yet'
+              : 'No transactions match your search'}
           </p>
           <p className="text-neutral-400 text-xs mt-1">
-            Try switching filters or search terms
+            {transactions.length === 0
+              ? 'Transactions you perform will appear here on your statement.'
+              : 'Try switching filters or search terms'}
           </p>
         </div>
       ) : (
@@ -245,6 +286,9 @@ export default function TransactionHistory() {
                       {TRANSACTION_TYPE_LABELS[txn.type] ?? txn.type}
                     </p>
                     <StatusBadge status={txn.status} />
+                    {txn.mlScore != null && (
+                      <MlScoreBadge score={txn.mlScore} riskLevel={txn.mlRiskLevel} />
+                    )}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
                     <span className="font-semibold text-neutral-700">
@@ -297,8 +341,11 @@ export default function TransactionHistory() {
               <p className="text-2xl font-black font-mono text-neutral-900">
                 {formatCurrency(selectedTxn.amount)}
               </p>
-              <div className="mt-1">
+              <div className="mt-1 flex items-center justify-center gap-2">
                 <StatusBadge status={selectedTxn.status} />
+                {selectedTxn.mlScore != null && (
+                  <MlScoreBadge score={selectedTxn.mlScore} riskLevel={selectedTxn.mlRiskLevel} />
+                )}
               </div>
             </div>
 

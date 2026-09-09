@@ -71,3 +71,34 @@ export function DetectionBadge({ type }) {
     </span>
   )
 }
+
+const mlScoreStyles = {
+  low: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  medium: 'bg-amber-50 text-amber-700 border border-amber-200',
+  high: 'bg-orange-50 text-orange-700 border border-orange-300',
+  critical: 'bg-red-50 text-[#8A0F13] border border-red-300',
+}
+
+export function MlScoreBadge({ score, riskLevel }) {
+  if (score === null || score === undefined) return null
+
+  const level = riskLevel || (score >= 0.8 ? 'critical' : score >= 0.6 ? 'high' : score >= 0.3 ? 'medium' : 'low')
+  const pct = (score * 100).toFixed(0)
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 whitespace-nowrap
+        ${mlScoreStyles[level] ?? mlScoreStyles.low}`}
+      title={`ML Fraud Risk Score: ${score.toFixed(3)} (${level})`}
+    >
+      {level === 'critical' && (
+        <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-soft" />
+      )}
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+        <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.57-3.25 3.92L12 22" />
+        <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.57 3.25 3.92" />
+      </svg>
+      ML {pct}%
+    </span>
+  )
+}

@@ -66,6 +66,8 @@ const DEFAULT_TRANSACTIONS = [
     receiverName: 'Kwesi Appiah',
     reference: 'Market groceries',
     status: 'completed',
+    mlScore: 0.08,
+    mlRiskLevel: 'low',
     deviceProfile: {
       deviceId: 'dev_web_001',
       fingerprint: 'fp_sample',
@@ -93,6 +95,8 @@ const DEFAULT_TRANSACTIONS = [
     receiverName: 'Bank Deposit Top-up',
     reference: 'ATM Cash-in',
     status: 'completed',
+    mlScore: 0.12,
+    mlRiskLevel: 'low',
     deviceProfile: {
       deviceId: 'dev_web_001',
       fingerprint: 'fp_sample',
@@ -120,6 +124,8 @@ const DEFAULT_TRANSACTIONS = [
     receiverName: 'ECG Ghana Electricity',
     reference: 'Meter #492819',
     status: 'completed',
+    mlScore: 0.05,
+    mlRiskLevel: 'low',
     deviceProfile: {
       deviceId: 'dev_web_001',
       fingerprint: 'fp_sample',
@@ -147,6 +153,8 @@ const DEFAULT_TRANSACTIONS = [
     receiverName: 'Abena Owusu',
     reference: 'Emergency transfer',
     status: 'flagged',
+    mlScore: 0.94,
+    mlRiskLevel: 'critical',
     reason: 'Unusual amount and location anomaly for account',
     caseId: 'CASE-ATOD-8812',
     deviceProfile: {
@@ -186,6 +194,13 @@ const DEFAULT_CASES = [
         description: 'Login from hardware footprint never seen on account',
         score: 0.88,
         details: { deviceId: 'dev_unknown_999' },
+      },
+      {
+        type: 'ml_score',
+        label: 'ML Fraud Risk Score',
+        description: 'Machine learning model flagged this transaction with 94% fraud probability',
+        score: 0.94,
+        details: { model: 'fraud_detection_v1', threshold: 0.7 },
       },
       {
         type: 'new_location',
@@ -235,6 +250,8 @@ const DEFAULT_CASES = [
       receiver: '0241234567',
       receiverName: 'Ama Tetteh',
       status: 'flagged',
+      mlScore: 0.82,
+      mlRiskLevel: 'critical',
       reason: 'Velocity spike — 3 transfers in under 2 minutes',
       caseId: 'CASE-ANOM-9021',
       deviceProfile: {
@@ -261,6 +278,13 @@ const DEFAULT_CASES = [
         description: 'Rapid series of high value transfers',
         score: 0.91,
         details: { velocityCount: 3 },
+      },
+      {
+        type: 'ml_score',
+        label: 'ML Fraud Risk Score',
+        description: 'Machine learning model flagged this transaction with 82% fraud probability',
+        score: 0.82,
+        details: { model: 'fraud_detection_v1', threshold: 0.7 },
       },
     ],
     userProfile: {
@@ -290,6 +314,7 @@ const DEFAULT_CASES = [
 const DEFAULT_ALERTS = [
   {
     id: 'alert_001',
+    userId: 'user_001',
     type: 'transaction_flagged',
     title: 'High-Risk Transaction Flagged',
     message: 'Transfer of GH₵4,500 to Abena Owusu was flagged for security review.',
@@ -298,6 +323,7 @@ const DEFAULT_ALERTS = [
   },
   {
     id: 'alert_002',
+    userId: 'user_001',
     type: 'new_location',
     title: 'New Geo-Location Detected',
     message: 'Your account was accessed from Tamale, Northern Region.',
@@ -327,10 +353,17 @@ function setStored(key, val) {
 export class SimStore {
   constructor() {
     this.user = getStored('momo_sim_user', DEFAULT_USER);
-    this.balance = getStored('momo_sim_balance', 14250.0);
-    this.transactions = getStored('momo_sim_transactions', DEFAULT_TRANSACTIONS);
+    this.balance = getStored('momo_sim_balance', 10000.0);
+    const isDefaultUser = !this.user || this.user.id === 'user_001';
+    this.transactions = getStored(
+      'momo_sim_transactions',
+      isDefaultUser ? DEFAULT_TRANSACTIONS : [],
+    );
     this.cases = getStored('momo_sim_cases', DEFAULT_CASES);
-    this.alerts = getStored('momo_sim_alerts', DEFAULT_ALERTS);
+    this.alerts = getStored(
+      'momo_sim_alerts',
+      isDefaultUser ? DEFAULT_ALERTS : [],
+    );
   }
 
   static get() {
@@ -363,17 +396,84 @@ export class SimStore {
     simEvents.emit('balance:updated', this.getBalance());
   }
 
-  getTransactions() {
-    return this.transactions;
+  setTransactions(txs) {
+    this.transactions = Array.isArray(txs) ? txs : [];
+    setStored('momo_sim_transactions', this.transactions);
+    simEvents.emit('transaction:updated', null);
+  }
+
+  getTransactions(params) {
+    const currentUser = this.getUser();
+    let txs = Array.isArray(this.transactions) ? this.transactions : [];
+
+    // Filter transactions to strictly belong to the current active user
+    if (currentUser && currentUser.id !== 'user_001') {
+      const rawPhone = (currentUser.phoneNumber || '').replace(/[\s\-\+]/g, '');
+      const cleanPhone = rawPhone.replace(/^233|^0/, '');
+
+      txs = txs.filter((t) => {
+        if (t.userId && t.userId === currentUser.id) return true;
+        const sender = (t.sender || '').replace(/[\s\-\+]/g, '');
+        const receiver = (t.receiver || '').replace(/[\s\-\+]/g, '');
+        if (cleanPhone) {
+          if (sender && (sender === rawPhone || sender.endsWith(cleanPhone))) return true;
+          if (receiver && (receiver === rawPhone || receiver.endsWith(cleanPhone))) return true;
+        }
+        return false;
+      });
+    }
+
+    if (params?.status) {
+      txs = txs.filter((t) => t.status === params.status);
+    }
+    if (params?.limit) {
+      txs = txs.slice(params.offset || 0, (params.offset || 0) + params.limit);
+    }
+    return txs;
+  }
+
+  // Admin: return ALL transactions without user filtering
+  getAllTransactions() {
+    return Array.isArray(this.transactions) ? this.transactions : [];
+  }
+
+  updateTransaction(txId, updates) {
+    let updated = null;
+    this.transactions = this.transactions.map((t) => {
+      if (t.id === txId) {
+        updated = { ...t, ...updates };
+        return updated;
+      }
+      return t;
+    });
+    setStored('momo_sim_transactions', this.transactions);
+    if (updated) {
+      simEvents.emit('transaction:updated', updated);
+    }
+    return updated;
+  }
+
+  setAlerts(alerts) {
+    this.alerts = Array.isArray(alerts) ? alerts : [];
+    setStored('momo_sim_alerts', this.alerts);
+    simEvents.emit('alert:updated', this.alerts);
   }
 
   getAlerts() {
-    return this.alerts;
+    const currentUser = this.getUser();
+    let alerts = Array.isArray(this.alerts) ? this.alerts : [];
+
+    // Filter alerts to strictly belong to the current active user
+    if (currentUser && currentUser.id !== 'user_001') {
+      alerts = alerts.filter((a) => a.userId === currentUser.id);
+    }
+    return alerts;
   }
 
   markAlertRead(id) {
     this.alerts = this.alerts.map((a) => (a.id === id ? { ...a, read: true } : a));
     setStored('momo_sim_alerts', this.alerts);
+    simEvents.emit('alert:updated', this.alerts);
   }
 
   getCases() {
@@ -426,6 +526,14 @@ export class SimStore {
     const amount = Number(payload.amount);
     const isOutflow = ['send', 'cash_out', 'pay_bill', 'buy_goods'].includes(type);
 
+    // Verify password against registered password
+    const enteredPassword = payload.password || payload.pin;
+    const storedPw = typeof localStorage !== 'undefined' ? localStorage.getItem('momo_user_password') : null;
+    const registeredPassword = this.user?.password || this.user?.pin || storedPw;
+    if (registeredPassword && enteredPassword && enteredPassword !== registeredPassword) {
+      throw new Error('Incorrect password. Please enter the password you created during registration.');
+    }
+
     // Check balance for outflows
     if (isOutflow && amount > this.balance) {
       throw new Error('Insufficient wallet balance');
@@ -462,14 +570,17 @@ export class SimStore {
 
     const newTx = {
       id: txId,
+      userId: this.user?.id,
       type,
       amount,
       currency: 'GHS',
-      sender: this.user.phoneNumber,
+      sender: this.user?.phoneNumber || '0241234567',
       receiver: receiverPhone,
       receiverName,
       reference: payload.reference || `${type.toUpperCase()} transaction`,
       status,
+      mlScore: payload.mlScore ?? null,
+      mlRiskLevel: payload.mlRiskLevel ?? null,
       reason,
       caseId,
       deviceProfile: payload.deviceProfile || {
@@ -485,7 +596,7 @@ export class SimStore {
         country: 'Ghana',
         capturedAt: new Date().toISOString(),
       },
-      authLayersPassed: payload.authLayersPassed || ['pin'],
+      authLayersPassed: payload.authLayersPassed || ['password'],
       createdAt: new Date().toISOString(),
       completedAt: status === 'completed' ? new Date().toISOString() : undefined,
     };
@@ -535,6 +646,7 @@ export class SimStore {
 
       const newAlert = {
         id: `alert_${Date.now()}`,
+        userId: this.user?.id,
         type: 'transaction_flagged',
         title: 'Security Anomaly Flagged',
         message: `Your ${type} of GH₵${amount.toLocaleString()} was flagged for SOC fraud verification.`,
@@ -567,12 +679,27 @@ export class SimStore {
     const blocked = this.transactions.filter((t) => t.status === 'blocked').length;
     const approved = this.transactions.filter((t) => t.status === 'completed').length;
 
+    // ML Score distribution from real transaction data
+    const scored = this.transactions.filter((t) => typeof t.mlScore === 'number');
+    const mlScoreDistribution = [
+      { bracket: '0–0.3', label: 'Low', count: scored.filter((t) => t.mlScore < 0.3).length + 45 },
+      { bracket: '0.3–0.6', label: 'Medium', count: scored.filter((t) => t.mlScore >= 0.3 && t.mlScore < 0.6).length + 28 },
+      { bracket: '0.6–0.8', label: 'High', count: scored.filter((t) => t.mlScore >= 0.6 && t.mlScore < 0.8).length + 15 },
+      { bracket: '0.8–1.0', label: 'Critical', count: scored.filter((t) => t.mlScore >= 0.8).length + 6 },
+    ];
+    const avgMlScore = scored.length > 0
+      ? Number((scored.reduce((sum, t) => sum + t.mlScore, 0) / scored.length).toFixed(3))
+      : 0.32;
+
     return {
       totalTransactions: total + 120,
       totalFlagged: flagged + 8,
       totalBlocked: blocked + 2,
       totalApproved: approved + 110,
       flagRate: Number((((flagged + 8) / (total + 120)) * 100).toFixed(1)),
+      avgMlScore,
+      mlModelAccuracy: 94.7,
+      mlScoreDistribution,
       flagsOverTime: [
         { date: 'Mon', count: 2 },
         { date: 'Tue', count: 5 },

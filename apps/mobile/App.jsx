@@ -676,7 +676,7 @@ export default function App() {
               <View style={styles.balanceRow}>
                 <Text style={styles.balanceValue}>
                   {showBalance
-                    ? formatCurrency(balance?.available ?? 14250.0, 'GHS')
+                    ? formatCurrency(balance?.available ?? 10000.0, 'GHS')
                     : 'GH₵ ••••••••'}
                 </Text>
                 <TouchableOpacity

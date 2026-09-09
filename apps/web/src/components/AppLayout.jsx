@@ -1,8 +1,17 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import Navbar from './Navbar'
 import BottomNav from './BottomNav'
+import { stopAllMediaStreams } from '@momo/shared'
 
 export default function AppLayout({ children, hideNav = false }) {
+  const location = useLocation()
+
+  // Ensure camera streams are freed upon navigating between dashboard & service routes
+  useEffect(() => {
+    stopAllMediaStreams()
+  }, [location.pathname])
+
   if (hideNav) {
     return <>{children}</>
   }

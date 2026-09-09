@@ -16,7 +16,6 @@ import {
   PayBillIcon,
   BuyGoodsIcon,
   ShieldCheckIcon,
-  FingerprintIcon,
 } from '@momo/shared/src/components/Icons'
 
 export default function MobileSimulator() {
@@ -183,10 +182,15 @@ export default function MobileSimulator() {
                 to="/profile"
                 className="bg-white p-3 rounded-2xl border border-neutral-200 shadow-xs flex flex-col items-center justify-center text-center hover:bg-neutral-50 transition-colors"
               >
-                <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center mb-1.5">
-                  <FingerprintIcon size={20} color="#8A0F13" />
+                <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center mb-1.5 text-primary-800">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2.2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="2.5" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="2.5" />
+                  </svg>
                 </div>
-                <span className="text-xs font-bold text-neutral-800">Biometrics</span>
+                <span className="text-xs font-bold text-neutral-800">Face ID</span>
               </Link>
             </div>
 

@@ -16,13 +16,14 @@ export default function PayBill() {
         { id: 'receiver', label: 'Merchant or utility code', placeholder: 'e.g. ECG-PREPAID' },
         { id: 'receiverName', label: 'Account number', placeholder: 'Your account or meter number' },
       ]}
-      onSubmit={async (data, amount, authLayers = ['pin'], pin) => {
+      onSubmit={async (data, amount, authLayers = ['password'], password) => {
         const location = await captureLocation()
         return api.payBill({
           amount,
           receiver: data.receiver,
           receiverName: data.receiverName,
-          pin,
+          pin: password,
+          password,
           deviceProfile,
           location,
           authLayersPassed: authLayers,

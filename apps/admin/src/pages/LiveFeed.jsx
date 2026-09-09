@@ -72,8 +72,17 @@ export default function LiveFeed() {
     const open = cases.filter((c) => c.status === 'open' || c.status === 'under_review').length
     const critical = cases.filter((c) => c.riskLevel === 'critical').length
     const atod = cases.filter((c) => c.detectionType === 'atod').length
-    return { open, critical, atod, total: cases.length }
+    const scores = cases.map((c) => c.transaction?.mlScore).filter((s) => typeof s === 'number')
+    const avgMlScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length) : null
+    return { open, critical, atod, total: cases.length, avgMlScore }
   }, [cases])
+
+  const getMlScoreColor = (score) => {
+    if (score >= 0.8) return 'text-[#8A0F13] bg-[#F2D5D6] font-black'
+    if (score >= 0.6) return 'text-orange-700 bg-orange-50 font-bold'
+    if (score >= 0.3) return 'text-amber-700 bg-amber-50 font-semibold'
+    return 'text-emerald-700 bg-emerald-50 font-medium'
+  }
 
   const statusStyles = {
     open: 'bg-[#F2D5D6] text-[#8A0F13] border border-[#F9A8A8]',
@@ -155,6 +164,20 @@ export default function LiveFeed() {
           <p className="text-2xl font-black text-neutral-900">{stats.total}</p>
           <p className="text-[11px] text-neutral-400 mt-0.5">All time records</p>
         </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-neutral-100 shadow-xs col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-neutral-500">Avg ML Score</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.57-3.25 3.92L12 22" />
+              <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.57 3.25 3.92" />
+            </svg>
+          </div>
+          <p className="text-2xl font-black text-[#8A0F13]">
+            {stats.avgMlScore !== null ? (stats.avgMlScore * 100).toFixed(0) + '%' : '—'}
+          </p>
+          <p className="text-[11px] text-neutral-400 mt-0.5">Fraud probability</p>
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -224,6 +247,7 @@ export default function LiveFeed() {
                   <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4">Customer</th>
                   <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4">Detection Model</th>
                   <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4">Amount</th>
+                  <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4">ML Score</th>
                   <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4">Risk Level</th>
                   <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4">Case Status</th>
                   <th className="font-semibold text-xs text-neutral-500 py-3.5 px-4 text-right">Timestamp</th>
@@ -259,6 +283,16 @@ export default function LiveFeed() {
                     </td>
                     <td className="py-3.5 px-4 font-black text-neutral-900 text-sm">
                       {formatCurrency(c.transaction?.amount ?? 0)}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {typeof c.transaction?.mlScore === 'number' ? (
+                        <span className={`inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-0.5 font-mono ${getMlScoreColor(c.transaction.mlScore)}`}>
+                          {c.transaction.mlScore >= 0.8 && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+                          {(c.transaction.mlScore * 100).toFixed(0)}%
+                        </span>
+                      ) : (
+                        <span className="text-xs text-neutral-400">—</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       <span className={`inline-flex items-center text-xs font-bold rounded-full px-2.5 py-0.5 ${riskStyles[c.riskLevel]}`}>

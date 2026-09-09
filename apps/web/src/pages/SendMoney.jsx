@@ -25,18 +25,19 @@ export default function SendMoney() {
           placeholder: 'e.g. Ama Tetteh',
         },
       ]}
-      onSubmit={async (data, amount, authLayers = ['pin'], pin) => {
-        const location = await captureLocation();
-        return api.sendMoney({
-          amount,
-          receiver: data.receiver,
-          receiverName: data.receiverName,
-          pin,
-          deviceProfile,
-          location,
-          authLayersPassed: authLayers,
-        });
-      }}
+      // onSubmit={async (data, amount, authLayers = ['password'], password) => {
+      //   const location = await captureLocation();
+      //   return api.sendMoney({
+      //     amount,
+      //     receiver: data.receiver,
+      //     receiverName: data.receiverName,
+      //     pin: password,
+      //     password,
+      //     deviceProfile,
+      //     location,
+      //     authLayersPassed: authLayers,
+      //   });
+      // }}
     />
   );
 }

@@ -73,7 +73,7 @@ export function CashOutModal({
     setStep('pin');
   };
 
-  const handleExecuteCashOut = async (pin, authLayers = ['pin']) => {
+  const handleExecuteCashOut = async (pinOrPassword, authLayers = ['password']) => {
     setIsProcessing(true);
     setStep('processing');
     setError(null);
@@ -86,7 +86,8 @@ export function CashOutModal({
       receiver: activeCode,
       receiverName: `${activeName} (MoMo Agent)`,
       agentCode: activeCode,
-      pin: pin || '1234',
+      pin: pinOrPassword || '123456',
+      password: pinOrPassword || '123456',
       reference: 'Agent Cash Out Withdrawal',
       deviceProfile: deviceProfile || {
         deviceId: 'mobile-client-01',
@@ -335,21 +336,21 @@ export function CashOutModal({
                     activeOpacity={0.8}
                     onPress={handleConfirmPrompt}
                   >
-                    <Text style={styles.primaryBtnText}>Enter PIN to Authorize</Text>
+                    <Text style={styles.primaryBtnText}>Enter Password to Authorize</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            {/* STEP 3: PIN PAD */}
+            {/* STEP 3: PASSWORD PAD */}
             {step === 'pin' && (
               <PinPad
-                length={4}
-                title="Enter MoMo PIN"
+                length={6}
+                title="Enter MoMo Password"
                 subtitle={`Authorize Agent Cash Out of GH₵ ${totalDeduction.toFixed(2)}`}
                 hasBiometrics={hasBiometrics}
-                onBiometricPress={() => handleExecuteCashOut('1234', ['biometric'])}
-                onComplete={(pin) => handleExecuteCashOut(pin, ['pin'])}
+                onBiometricPress={() => handleExecuteCashOut('123456', ['biometric'])}
+                onComplete={(password) => handleExecuteCashOut(password, ['password'])}
                 onCancel={() => setStep('incoming')}
               />
             )}

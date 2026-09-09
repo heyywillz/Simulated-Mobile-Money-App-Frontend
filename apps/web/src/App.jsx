@@ -86,7 +86,7 @@ function BiometricRoute({ children }) {
   // }
 
   if (facialVerified) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -101,7 +101,7 @@ function PublicRoute({ children }) {
         sessionStorage.getItem('pending_biometric_type') || 'facial';
       return <Navigate to={`/verify/facial?type=${bioType}`} replace />;
     }
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -120,37 +120,27 @@ const router = createBrowserRouter([
     path: '/',
     element: <RootLayout />,
     children: [
+      // First page is Onboarding
+      {
+        index: true,
+        element: <Onboarding />,
+        action: onboardingAction,
+      },
+      {
+        path: 'onboarding',
+        element: <Onboarding />,
+        action: onboardingAction,
+      },
+
       // Public routes
       {
         path: 'login',
-        element: (
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
-        ),
-      },
-      {
-        index: 'onboarding',
-        element: (
-          <PublicRoute>
-            <Onboarding />
-          </PublicRoute>
-        ),
-        action: onboardingAction,
+        element: <Login />,
       },
 
       // Protected routes
       {
         path: 'dashboard',
-        element: (
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        ),
-        loader: dashboardLoader,
-      },
-      {
-        index: 'dashboard',
         element: (
           <ProtectedRoute>
             <Dashboard />

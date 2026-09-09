@@ -79,6 +79,21 @@ export async function freezeAccount(_accountId, _reason) {
   return { success: true };
 }
 
+// ─── Transactions (admin view — no user filtering) ──────────────
+
+export async function getAllTransactions(params) {
+  const txns = SimStore.get().getAllTransactions();
+  let list = [...txns];
+
+  if (params?.status) {
+    list = list.filter((t) => t.status === params.status);
+  }
+  if (params?.limit) {
+    list = list.slice(0, params.limit);
+  }
+  return list;
+}
+
 // ─── Analytics ──────────────────────────────────────────────────
 
 export async function getAnalytics() {

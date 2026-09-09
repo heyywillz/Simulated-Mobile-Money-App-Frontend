@@ -196,7 +196,73 @@ export default function CaseDetail() {
             </div>
           )}
 
-          {/* Contributing signals */}
+          {/* ML Fraud Intelligence */}
+          {typeof txn?.mlScore === 'number' && (
+            <div className="bg-white rounded-2xl border border-neutral-100 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.57-3.25 3.92L12 22" />
+                  <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.57 3.25 3.92" />
+                </svg>
+                <h3 className="text-sm font-bold text-neutral-900">ML Fraud Intelligence</h3>
+              </div>
+
+              <div className="flex items-center gap-6 mb-4">
+                {/* Circular score indicator */}
+                <div className="relative w-24 h-24 shrink-0">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="#f5f5f5" strokeWidth="8" />
+                    <circle
+                      cx="50" cy="50" r="42" fill="none"
+                      stroke={txn.mlScore >= 0.8 ? '#8A0F13' : txn.mlScore >= 0.6 ? '#c2410c' : txn.mlScore >= 0.3 ? '#b45309' : '#059669'}
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${txn.mlScore * 263.9} 263.9`}
+                      className="transition-all duration-1000"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xl font-black text-neutral-900">{(txn.mlScore * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <p className="text-xs text-neutral-500 mb-1">Fraud Probability</p>
+                  <p className="text-2xl font-black text-neutral-900 mb-2">{txn.mlScore.toFixed(3)}</p>
+                  <span className={`inline-flex items-center text-xs font-bold rounded-full px-2.5 py-0.5 ${
+                    txn.mlScore >= 0.8 ? 'bg-[#8A0F13] text-white' :
+                    txn.mlScore >= 0.6 ? 'bg-orange-600 text-white' :
+                    txn.mlScore >= 0.3 ? 'bg-amber-500 text-white' :
+                    'bg-emerald-500 text-white'
+                  }`}>
+                    {txn.mlScore >= 0.8 && <span className="w-1.5 h-1.5 rounded-full bg-white mr-1.5 animate-pulse" />}
+                    {txn.mlRiskLevel ? txn.mlRiskLevel.charAt(0).toUpperCase() + txn.mlRiskLevel.slice(1) : 'Unknown'} Risk
+                  </span>
+                </div>
+              </div>
+
+              {/* ML Feature breakdown */}
+              <div className="border-t border-neutral-100 pt-4">
+                <p className="text-xs font-semibold text-neutral-600 mb-3">Model Input Features</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Unusual Location', key: 'location', active: txn.location?.city !== 'Accra' },
+                    { label: 'New Device', key: 'device', active: txn.deviceProfile?.deviceId?.includes('unknown') },
+                    { label: 'High Amount', key: 'amount', active: (txn.amount || 0) > 2000 },
+                    { label: 'Unusual Time', key: 'time', active: false },
+                    { label: 'New User', key: 'user', active: false },
+                    { label: 'Velocity Spike', key: 'velocity', active: caseData.signals?.some(s => s.type === 'unusual_amount' && s.details?.velocityCount) },
+                  ].map((f) => (
+                    <div key={f.key} className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${f.active ? 'bg-[#F2D5D6] text-[#8A0F13] font-semibold' : 'bg-neutral-50 text-neutral-500'}`}>
+                      <span className={`w-2 h-2 rounded-full ${f.active ? 'bg-[#8A0F13]' : 'bg-neutral-300'}`} />
+                      {f.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl border border-neutral-100 p-5">
             <h3 className="text-sm font-bold text-neutral-900 mb-4">Contributing signals</h3>
             <div className="space-y-3">
@@ -311,7 +377,7 @@ export default function CaseDetail() {
                 <div className="flex justify-between">
                   <span className="text-neutral-400">Biometric defense</span>
                   <span className="font-medium text-green-700 text-xs">
-                    Face & Fingerprint Active ✓
+                    Face ID Active ✓
                   </span>
                 </div>
                 <div className="flex justify-between">

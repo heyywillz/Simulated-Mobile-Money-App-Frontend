@@ -136,7 +136,7 @@ export function TransactionModal({
     setStep('pin');
   };
 
-  const handleExecuteTransaction = async (pin, authLayers = ['pin']) => {
+  const handleExecuteTransaction = async (pinOrPassword, authLayers = ['password']) => {
     setIsProcessing(true);
     setStep('processing');
     setError(null);
@@ -168,7 +168,8 @@ export function TransactionModal({
       amount: numAmount,
       receiver: finalReceiver,
       receiverName: finalReceiverName,
-      pin: pin || '1234',
+      pin: pinOrPassword || '123456',
+      password: pinOrPassword || '123456',
       reference: calculatedRef,
       recipientPhone: (type === 'send' || type === 'airtime') ? receiver.trim() : undefined,
       biller: type === 'pay_bill' ? selectedBiller.name : undefined,
@@ -649,15 +650,15 @@ export function TransactionModal({
               </ScrollView>
             )}
 
-            {/* STEP 2: PIN PAD */}
+            {/* STEP 2: PASSWORD PAD */}
             {step === 'pin' && (
               <PinPad
-                length={4}
-                title="Enter MoMo PIN"
+                length={6}
+                title="Enter MoMo Password"
                 subtitle={`Authorize ${getTitle()} of GH₵ ${parseFloat(amount) ? parseFloat(amount).toFixed(2) : '0.00'}`}
                 hasBiometrics={hasBiometrics}
-                onBiometricPress={() => handleExecuteTransaction('1234', ['biometric'])}
-                onComplete={(pin) => handleExecuteTransaction(pin, ['pin'])}
+                onBiometricPress={() => handleExecuteTransaction('123456', ['biometric'])}
+                onComplete={(password) => handleExecuteTransaction(password, ['password'])}
                 onCancel={() => setStep('input')}
               />
             )}

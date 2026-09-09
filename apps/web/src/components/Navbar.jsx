@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import * as api from '@momo/shared/src/api/endpoints'
+import { simEvents } from '@momo/shared/src/api/store'
 import swipePayRedLogo from '../assets/swipe-pay-red-logo.png'
 import {
   SendIcon,
@@ -20,13 +21,35 @@ export default function Navbar() {
   const [unreadAlerts, setUnreadAlerts] = useState(0)
 
   useEffect(() => {
-    api.getAlerts().then((alerts) => {
-      setUnreadAlerts(alerts.length)
-    }).catch(() => {})
+    const updateAlerts = () => {
+      api.getAlerts().then((alerts) => {
+        const list = Array.isArray(alerts) ? alerts : []
+        setUnreadAlerts(list.filter((a) => !a.read).length)
+      }).catch(() => {})
+    }
+    updateAlerts()
+
+    simEvents.on('alert:new', updateAlerts)
+    simEvents.on('alert:updated', updateAlerts)
+
+    const onCustomEvent = () => updateAlerts()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('momo_sim:alert:new', onCustomEvent)
+      window.addEventListener('momo_sim:alert:updated', onCustomEvent)
+    }
+
+    return () => {
+      simEvents.off('alert:new', updateAlerts)
+      simEvents.off('alert:updated', updateAlerts)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('momo_sim:alert:new', onCustomEvent)
+        window.removeEventListener('momo_sim:alert:updated', onCustomEvent)
+      }
+    }
   }, [location.pathname])
 
   const navLinks = [
-    { label: 'Dashboard', path: '/' },
+    { label: 'Dashboard', path: '/dashboard' },
     { label: 'Send Money', path: '/send', icon: SendIcon },
     { label: 'Cash Out', path: '/cash-out', icon: CashOutIcon },
     { label: 'Cash In', path: '/cash-in', icon: CashInIcon },
@@ -50,7 +73,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Left: Brand Logo & Navigation */}
           <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-3 group">
+            <Link to="/dashboard" className="flex items-center gap-3 group">
               <img
                 src={swipePayRedLogo}
                 alt="Swipe Pay"

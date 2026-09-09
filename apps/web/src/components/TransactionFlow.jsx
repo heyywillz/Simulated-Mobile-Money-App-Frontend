@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PinPad from './PinPad';
+import { useAuth } from '../contexts/AuthContext';
 import { StatusBadge } from './StatusBadge';
 import BiometricModal from './BiometricModal';
 import { formatCurrency } from '@momo/shared/src/constants';
@@ -11,7 +12,7 @@ import {
   FingerprintIcon,
 } from '@momo/shared/src/components/Icons';
 import { useAppSelector } from '../store/hooks';
-import axios from 'axios';
+import axios from "axios"
 
 const PRESET_AMOUNTS = [10, 20, 50, 100, 200, 500];
 
@@ -23,6 +24,7 @@ export default function TransactionFlow({
   onSubmit,
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState('input');
   const [formData, setFormData] = useState({});
   const [amount, setAmount] = useState('');
@@ -31,6 +33,13 @@ export default function TransactionFlow({
   const [result, setResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [stepUpAttempts, setStepUpAttempts] = useState(0);
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (step === 'input' || step === 'pin') {
+      isSubmittingRef.current = false;
+    }
+  }, [step]);
 
   // Biometric Modal State
   const [isBioModalOpen, setIsBioModalOpen] = useState(false);
@@ -52,70 +61,86 @@ export default function TransactionFlow({
     setStep('pin');
   };
 
+
+    // function validateUSer transaction
+const {user: userAuth} = useAppSelector(state => state.auth)
+const {deviceProfile, currentLocation} = useAppSelector(state => state.telemetry)
+async function PassUserInputs(){
+  const {phoneNumber}= userAuth
+  console.log('phoneNumber', phoneNumber, phoneNumber.slice(1))
+
+
+
+  const {latitude:lat, longitude:long} = currentLocation
+  // gather userInput
+  const userInputs ={
+
+    SenderPhone: `233-${phoneNumber.slice(1).split('').join("")}` , 
+    receiverPhone:`233-${formData.receiver.slice(1).split('').join("")}`, 
+    amount:Number(amount), 
+    device: deviceProfile.deviceId,
+    location: {lat, long}
+    
+
+  }
+
+  console.log("output ", userInputs)
+
+  try {
+    console.log("user inputs sent", userInputs)
+    const response = await axios.post("https://machine-learning-server-3.onrender.com/transaction", userInputs, {withCredentials:true})
+    console.log("user machine learning predict", response?.data, response)
+  } catch (error) {
+    console.log("Server response:", error.response?.status, error.response?.data)
+    console.error("user inputs error", error?.message , error)
+    
+  }
+
+
+}
+
   // Step 1: User completes PIN -> Trigger mandatory Layer 2 Biometric Authorization
+  const handlePinComplete = (enteredPassword) => {
+    PassUserInputs()
+    if (!enteredPassword || !enteredPassword.trim()) {
+      setError('Please enter your account password');
+      return;
+    }
 
-  const { currentLocation, deviceProfile } = useAppSelector(
-    (state) => state.telemetry,
-  );
+    // Strict validation against registered account password
+    const regPassword =
+      user?.password ||
+      user?.pin ||
+      (typeof localStorage !== 'undefined'
+        ? localStorage.getItem('momo_user_password') ||
+          JSON.parse(localStorage.getItem('momo_sim_user') || '{}')?.password ||
+          JSON.parse(localStorage.getItem('momo_sim_user') || '{}')?.pin
+        : null);
 
-  const { transactions } = useAppSelector((state) => state.transactions);
+    if (regPassword && enteredPassword.trim() !== regPassword) {
+      setError('Incorrect password. Please enter the password you created during registration.');
+      return;
+    }
 
-  // const { amount: money, sender, receiver } = currentTransaction;
-  const handlePinComplete = (enteredPin) => {
-    PostTransaction();
-    setCurrentPin(enteredPin);
+    setCurrentPin(enteredPassword.trim());
     setError(null);
     setBioModalMode('facial');
     setBioModalTitle('Layer 2 Security Check: Biometric Authorization');
     setBioModalSubtitle(
-      `Verify your identity via Face ID or Fingerprint to release GH₵ ${parsedAmount.toFixed(2)}`,
+      `Verify your identity via Face ID to release GH₵ ${parsedAmount.toFixed(2)}`,
     );
 
     setIsBioModalOpen(true);
   };
 
-  async function PostTransaction() {
-    console.log('formData', formData);
-    const currentTransaction = transactions[transactions.length - 1];
 
-    const money = amount || currentTransaction?.amount || 100;
-    const sender =
-      formData.receiver || currentTransaction?.sender || '0248490032';
-    const receiver =
-      formData.receiver || currentTransaction?.receiver || '0542512341';
-    const all_useful_inputs = {
-      amount: money,
-      SenderPhone: `233-${sender.slice(1).split('').join('')}`,
-      receiverPhone: `233-${receiver.slice(1).split('').join('')}`,
-      location: {
-        lat: currentLocation.latitude,
-        long: currentLocation.longitude,
-      },
-      device: deviceProfile.deviceName,
-    };
 
-    console.log('hello', all_useful_inputs);
-    try {
-      const response = await axios.post(
-        'http://localhost:5000/transaction',
-        all_useful_inputs,
-        {
-          withCredentials: true,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-      console.log('response', response, response.data);
-    } catch (error) {
-      console.log('error', error);
-    }
-  }
-
-  // Open Direct Biometric on PIN Pad if clicked explicitly
-  const openDirectBiometric = (mode) => {
-    setBioModalMode(mode);
+  // Open Direct Biometric on Password Pad if clicked explicitly
+  const openDirectBiometric = (mode = 'facial') => {
+    setBioModalMode('facial');
     setBioModalTitle('Layer 2 Security Check: Biometric Authorization');
     setBioModalSubtitle(
-      `Authorize GH₵ ${parsedAmount.toFixed(2)} with ${mode === 'facial' ? 'Face ID' : 'Fingerprint'}`,
+      `Authorize GH₵ ${parsedAmount.toFixed(2)} with Face ID`,
     );
     setIsBioModalOpen(true);
   };
@@ -132,13 +157,15 @@ export default function TransactionFlow({
 
   // Handle Biometric Verification Success
   const handleBiometricSuccess = async (method) => {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsBioModalOpen(false);
     setStep('processing');
     setIsLoading(true);
     setError(null);
 
     try {
-      const layers = ['pin', method];
+      const layers = ['password', method];
       const response = await onSubmit(
         formData,
         parsedAmount,
@@ -153,6 +180,7 @@ export default function TransactionFlow({
         setStep('result');
       }
     } catch (err) {
+      isSubmittingRef.current = false;
       const errorMsg = err.response?.data?.error ?? 'Transaction failed';
       if (
         err.response?.status === 401 ||
@@ -417,8 +445,8 @@ export default function TransactionFlow({
           <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-xs space-y-4">
             <PinPad
               onComplete={handlePinComplete}
-              title="Step 1: Enter Secret MoMo PIN"
-              subtitle="Step 2 (Face ID / Fingerprint verification) will prompt next"
+              title="Step 1: Enter Account Password"
+              subtitle="Enter the password you created during registration (Face ID verification will follow)"
               error={error ?? undefined}
               isLoading={isLoading}
             />
@@ -443,14 +471,6 @@ export default function TransactionFlow({
                     <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                   </svg>
                   <span>Face ID</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openDirectBiometric('fingerprint')}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-neutral-700 hover:text-primary-800 rounded-lg hover:bg-neutral-50 border border-neutral-200 transition-colors shadow-2xs"
-                >
-                  <FingerprintIcon size={13} color="#8A0F13" />
-                  <span>Fingerprint</span>
                 </button>
               </div>
             </div>
@@ -523,15 +543,6 @@ export default function TransactionFlow({
                 <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="2.5" />
               </svg>
               <span>Scan Face ID to Approve</span>
-            </button>
-
-            {/* Backup: Fingerprint Sensor */}
-            <button
-              onClick={() => openStepUpBiometric('fingerprint')}
-              className="btn-secondary w-full flex items-center justify-center gap-2 py-3 text-xs font-bold border-neutral-300 text-neutral-800 hover:bg-neutral-50"
-            >
-              <FingerprintIcon size={18} color="#8A0F13" />
-              <span>Use Fingerprint Sensor</span>
             </button>
           </div>
         </div>
@@ -652,7 +663,7 @@ export default function TransactionFlow({
 
             <div className="space-y-2">
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/dashboard')}
                 className="btn-primary w-full py-3 text-sm font-bold"
               >
                 Return to Dashboard

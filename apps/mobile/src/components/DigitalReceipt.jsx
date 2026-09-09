@@ -189,7 +189,7 @@ export function DigitalReceipt({ transaction, onClose }) {
               </View>
               <Text style={styles.telemetryValue}>
                 {transaction.authLayersPassed?.join(' + ').toUpperCase() ||
-                  'PIN AUTHENTICATED'}
+                  'PASSWORD AUTHENTICATED'}
               </Text>
             </View>
           </View>

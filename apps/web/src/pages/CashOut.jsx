@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import PinPad from '../components/PinPad'
@@ -13,14 +13,13 @@ import {
   CheckIcon,
   CashOutIcon,
   ZapIcon,
-  FingerprintIcon,
 } from '@momo/shared/src/components/Icons'
 
 const PRESET_AMOUNTS = [20, 50, 100, 200, 500, 1000]
 
 export default function CashOut() {
   const navigate = useNavigate()
-  const { deviceProfile } = useAuth()
+  const { deviceProfile, user } = useAuth()
 
   const [isCashOutAllowed, setIsCashOutAllowed] = useState(false)
   const [countdownSeconds, setCountdownSeconds] = useState(300)
@@ -34,7 +33,14 @@ export default function CashOut() {
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [stepUpAttempts, setStepUpAttempts] = useState(0)
-  const [currentPin, setCurrentPin] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const isSubmittingRef = useRef(false)
+
+  useEffect(() => {
+    if (step === 'settings' || step === 'incoming_prompt' || step === 'password') {
+      isSubmittingRef.current = false
+    }
+  }, [step])
 
   // Biometric Modal State
   const [isBioModalOpen, setIsBioModalOpen] = useState(false)
@@ -96,7 +102,7 @@ export default function CashOut() {
   }
 
   const handleAuthorizePrompt = () => {
-    setStep('pin')
+    setStep('password')
   }
 
   const handleDeclinePrompt = () => {
@@ -104,28 +110,47 @@ export default function CashOut() {
     setStep('settings')
   }
 
-  // Step 1: User completes PIN -> Immediately trigger mandatory Layer 2 Biometric Authorization
-  const handlePinComplete = (enteredPin) => {
+  // Step 1: User completes Password -> Verify against registered password
+  const handlePasswordComplete = (enteredPassword) => {
     if (!promptData) return
-    setCurrentPin(enteredPin)
+    if (!enteredPassword || !enteredPassword.trim()) {
+      setError('Please enter your account password')
+      return
+    }
+
+    const regPassword =
+      user?.password ||
+      user?.pin ||
+      (typeof localStorage !== 'undefined'
+        ? localStorage.getItem('momo_user_password') ||
+          JSON.parse(localStorage.getItem('momo_sim_user') || '{}')?.password ||
+          JSON.parse(localStorage.getItem('momo_sim_user') || '{}')?.pin
+        : null)
+
+    if (regPassword && enteredPassword.trim() !== regPassword) {
+      setError('Incorrect password. Please enter the password you created during registration.')
+      return
+    }
+
+    setCurrentPassword(enteredPassword.trim())
     setError(null)
     setBioModalMode('facial')
     setBioModalTitle('Layer 2 Security Check: Biometric Authorization')
-    setBioModalSubtitle(`Verify your identity via Face ID or Fingerprint to release GH₵ ${promptData.amount.toFixed(2)} cash withdrawal`)
+    setBioModalSubtitle(`Verify your identity via Face ID to release GH₵ ${promptData.amount.toFixed(2)} cash withdrawal`)
     setIsBioModalOpen(true)
   }
 
   // Open Direct Biometric Modal if clicked
-  const openDirectBiometric = (mode) => {
-    setBioModalMode(mode)
+  const openDirectBiometric = (mode = 'facial') => {
+    setBioModalMode('facial')
     setBioModalTitle('Layer 2 Security Check: Biometric Authorization')
-    setBioModalSubtitle(`Authorize withdrawal of GH₵ ${promptData?.amount ?? 100} with ${mode === 'facial' ? 'Face ID' : 'Fingerprint'}`)
+    setBioModalSubtitle(`Authorize withdrawal of GH₵ ${promptData?.amount ?? 100} with Face ID`)
     setIsBioModalOpen(true)
   }
 
   // Open Step-Up Biometric Modal
-  const openStepUpBiometric = (mode) => {
-    setBioModalMode(mode)
+  const openStepUpBiometric = (mode = 'facial') => {
+    setBioModalMode('facial')
     setBioModalTitle('Security Challenge: Step-Up Biometric Check')
     setBioModalSubtitle('Anomalous withdrawal pattern detected — Biometric proof required')
     setIsBioModalOpen(true)
@@ -133,7 +158,8 @@ export default function CashOut() {
 
   // Handle Biometric Modal Success
   const handleBiometricSuccess = async (method) => {
-    if (!promptData) return
+    if (!promptData || isSubmittingRef.current) return
+    isSubmittingRef.current = true
     setIsBioModalOpen(false)
     setIsLoading(true)
     setStep('processing')
@@ -141,12 +167,13 @@ export default function CashOut() {
 
     try {
       const location = await captureLocation()
-      const layers = ['pin', method]
+      const layers = ['password', method || 'facial']
       const verifiedResponse = await api.cashOut({
         amount: promptData.amount,
         receiver: promptData.agentNumber,
         receiverName: promptData.agentName,
-        pin: currentPin,
+        pin: currentPassword,
+        password: currentPassword,
         deviceProfile,
         location,
         authLayersPassed: layers,
@@ -154,15 +181,16 @@ export default function CashOut() {
       setResult({
         ...verifiedResponse,
         status: verifiedResponse.status ?? 'completed',
-        reason: method === 'facial' ? 'Verified via Face ID Biometrics' : 'Verified via Fingerprint Sensor',
+        reason: 'Verified via Face ID Biometrics',
       })
       setIsCashOutAllowed(false)
       setStep('result')
     } catch (err) {
+      isSubmittingRef.current = false
       const errorMsg = err.response?.data?.error ?? 'Cash out failed'
-      if (err.response?.status === 401 || errorMsg.toLowerCase().includes('pin')) {
+      if (err.response?.status === 401 || errorMsg.toLowerCase().includes('pin') || errorMsg.toLowerCase().includes('password')) {
         setError(errorMsg)
-        setStep('pin')
+        setStep('password')
       } else {
         setError(errorMsg)
         setStep('result')
@@ -208,8 +236,8 @@ export default function CashOut() {
         onFailure={handleBiometricFailure}
         title={bioModalTitle}
         subtitle={bioModalSubtitle}
-        initialMode={bioModalMode}
-        allowModeSwitch={true}
+        initialMode="facial"
+        allowModeSwitch={false}
       />
 
       {/* Header */}
@@ -405,7 +433,7 @@ export default function CashOut() {
                     1
                   </div>
                   <p className="text-neutral-600">
-                    <strong className="text-neutral-900">Never share your PIN with an agent:</strong> Enter your PIN only on your own screen.
+                    <strong className="text-neutral-900">Never share your Password with an agent:</strong> Enter your Password only on your own screen.
                   </p>
                 </div>
                 <div className="flex items-start gap-2.5">
@@ -413,7 +441,7 @@ export default function CashOut() {
                     2
                   </div>
                   <p className="text-neutral-600">
-                    <strong className="text-neutral-900">AI Risk Scoring:</strong> Cash outs at unusual hours, high sums, or unverified agent SIMs trigger step-up Face ID / Fingerprint verification.
+                    <strong className="text-neutral-900">AI Risk Scoring:</strong> Cash outs at unusual hours, high sums, or unverified agent SIMs trigger step-up Face ID verification.
                   </p>
                 </div>
                 <div className="flex items-start gap-2.5">
@@ -476,7 +504,7 @@ export default function CashOut() {
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-colors shadow-lg flex items-center justify-center gap-2"
               >
                 <CheckIcon size={16} color="#FFFFFF" />
-                <span>Approve Withdrawal (Enter PIN / Biometrics)</span>
+                <span>Approve Withdrawal (Enter Password / Face ID)</span>
               </button>
               <button
                 type="button"
@@ -490,8 +518,8 @@ export default function CashOut() {
         </div>
       )}
 
-      {/* Step 3: PIN Pad (Layer 1 of 2) */}
-      {step === 'pin' && promptData && (
+      {/* Step 3: Password Pad (Layer 1 of 2) */}
+      {step === 'password' && promptData && (
         <div className="max-w-md mx-auto animate-slide-up space-y-4">
           <div className="text-center bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-primary-800 border border-red-200 rounded-full text-[11px] font-bold mb-2">
@@ -503,9 +531,9 @@ export default function CashOut() {
           </div>
           <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-xs space-y-4">
             <PinPad
-              onComplete={handlePinComplete}
-              title="Step 1: Enter Secret MoMo PIN"
-              subtitle="Step 2 (Face ID / Fingerprint verification) will prompt next"
+              onComplete={handlePasswordComplete}
+              title="Step 1: Enter Account Password"
+              subtitle="Enter the password you created during registration (Face ID verification will follow)"
               error={error ?? undefined}
               isLoading={isLoading}
             />
@@ -516,21 +544,15 @@ export default function CashOut() {
                 <button
                   type="button"
                   onClick={() => openDirectBiometric('facial')}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-neutral-700 hover:text-primary-800 rounded-lg hover:bg-neutral-50 border border-neutral-200 transition-colors shadow-2xs"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-neutral-700 hover:text-primary-800 rounded-lg hover:bg-neutral-50 border border-neutral-200 transition-colors shadow-2xs"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2.2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2.2">
                     <circle cx="12" cy="12" r="10" />
                     <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="2.5" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="2.5" />
                   </svg>
                   <span>Face ID</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openDirectBiometric('fingerprint')}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-neutral-700 hover:text-primary-800 rounded-lg hover:bg-neutral-50 border border-neutral-200 transition-colors shadow-2xs"
-                >
-                  <FingerprintIcon size={13} color="#8A0F13" />
-                  <span>Fingerprint</span>
                 </button>
               </div>
             </div>
@@ -584,13 +606,6 @@ export default function CashOut() {
                 <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="2.5" />
               </svg>
               <span>Scan Face ID to Approve</span>
-            </button>
-            <button
-              onClick={() => openStepUpBiometric('fingerprint')}
-              className="btn-secondary w-full flex items-center justify-center gap-2 py-3 text-xs font-bold border-neutral-300 text-neutral-800 hover:bg-neutral-50"
-            >
-              <FingerprintIcon size={18} color="#8A0F13" />
-              <span>Use Fingerprint Sensor</span>
             </button>
           </div>
         </div>
@@ -682,7 +697,7 @@ export default function CashOut() {
                 onClick={() => {
                   setStep('settings')
                   setPromptData(null)
-                  navigate('/')
+                  navigate('/dashboard')
                 }}
                 className="btn-primary w-full py-3 text-sm font-bold"
               >

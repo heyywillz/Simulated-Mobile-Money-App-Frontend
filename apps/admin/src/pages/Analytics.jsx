@@ -75,7 +75,7 @@ export default function Analytics() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white p-5 rounded-2xl border border-neutral-100 shadow-xs">
           <p className="text-xs text-neutral-500 font-medium mb-1">Total transactions</p>
           <p className="text-2xl sm:text-3xl font-black text-neutral-900">{data.totalTransactions.toLocaleString()}</p>
@@ -95,6 +95,22 @@ export default function Analytics() {
           <p className="text-xs text-neutral-500 font-medium mb-1">Approved post-review</p>
           <p className="text-2xl sm:text-3xl font-black text-neutral-900">{data.totalApproved}</p>
           <p className="text-[11px] text-green-700 font-medium mt-1">Analyst authorized</p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-neutral-100 shadow-xs">
+          <div className="flex items-center gap-2 mb-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.57-3.25 3.92L12 22" />
+              <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.57 3.25 3.92" />
+            </svg>
+            <p className="text-xs text-neutral-500 font-medium">ML Model Accuracy</p>
+          </div>
+          <p className="text-2xl sm:text-3xl font-black text-neutral-900">{data.mlModelAccuracy}%</p>
+          <p className="text-[11px] text-emerald-600 font-semibold mt-1">fraud_detection_v1</p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-neutral-100 shadow-xs">
+          <p className="text-xs text-neutral-500 font-medium mb-1">Avg ML Score</p>
+          <p className="text-2xl sm:text-3xl font-black text-[#8A0F13]">{(data.avgMlScore * 100).toFixed(0)}%</p>
+          <p className="text-[11px] text-neutral-400 mt-1">Across flagged txns</p>
         </div>
       </div>
 
@@ -159,6 +175,45 @@ export default function Analytics() {
             </div>
           </div>
         </div>
+
+        {/* ML Score Distribution */}
+        {data.mlScoreDistribution && (
+          <div className="bg-white rounded-2xl border border-neutral-100 p-5 shadow-xs lg:col-span-2">
+            <div className="flex items-center gap-2 mb-4">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A0F13" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.57-3.25 3.92L12 22" />
+                <path d="M12 2a4 4 0 0 0-4 4c0 1.95 1.4 3.57 3.25 3.92" />
+              </svg>
+              <h3 className="text-sm font-bold text-neutral-900">ML Score Distribution</h3>
+            </div>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.mlScoreDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+                  <XAxis dataKey="bracket" tick={{ fontSize: 11, fill: '#737373' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#A3A3A3' }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #E5E5E5', fontSize: '12px' }}
+                    formatter={(value, name) => [value, 'Transactions']}
+                    labelFormatter={(label) => `Score range: ${label}`}
+                  />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                    {data.mlScoreDistribution.map((entry, idx) => {
+                      const colors = ['#059669', '#b45309', '#c2410c', '#8A0F13']
+                      return <Cell key={idx} fill={colors[idx]} />
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-4 text-[11px] font-semibold mt-3 pt-3 border-t border-neutral-100">
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-600" /> Low</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-600" /> Medium</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-700" /> High</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#8A0F13]" /> Critical</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top flagged accounts */}

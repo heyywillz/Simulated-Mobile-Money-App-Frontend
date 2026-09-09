@@ -1,167 +1,164 @@
-import React, { useState, useCallback } from 'react'
-import { ShieldCheckIcon } from '@momo/shared/src/components/Icons'
+import React, { useState, useRef, useEffect } from 'react';
+import { ShieldCheckIcon } from '@momo/shared/src/components/Icons';
 
 export default function PinPad({
   onComplete,
   length = 6,
-  title = 'Enter your PIN',
-  subtitle,
+  title = 'Enter your Password',
+  subtitle = 'Enter the account password you created during registration to authorize this payment',
   error,
   isLoading = false,
   compact = false,
 }) {
-  const [pin, setPin] = useState('')
-  const [shakeError, setShakeError] = useState(false)
-  const [lastPressedKey, setLastPressedKey] = useState(null)
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [shakeError, setShakeError] = useState(false);
+  const inputRef = useRef(null);
 
-  const handlePress = useCallback(
-    (digit) => {
-      if (isLoading || pin.length >= length) return
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
 
-      setLastPressedKey(digit)
-      setTimeout(() => setLastPressedKey(null), 200)
+  useEffect(() => {
+    if (error) {
+      setShakeError(true);
+      const timer = setTimeout(() => setShakeError(false), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
-      const newPin = pin + digit
-      setPin(newPin)
-
-      if (newPin.length === length) {
-        setTimeout(() => onComplete(newPin), 150)
-      }
-    },
-    [pin, length, onComplete, isLoading]
-  )
-
-  const handleDelete = useCallback(() => {
-    if (isLoading) return
-    setPin((prev) => prev.slice(0, -1))
-  }, [isLoading])
-
-  const handleClear = useCallback(() => {
-    if (isLoading) return
-    setPin('')
-  }, [isLoading])
-
-  // Trigger shake on error
-  if (error && !shakeError) {
-    setShakeError(true)
-    setTimeout(() => {
-      setShakeError(false)
-      setPin('')
-    }, 600)
-  }
-
-  const keys = [
-    ['1', '2', '3'],
-    ['4', '5', '6'],
-    ['7', '8', '9'],
-    ['', '0', 'del'],
-  ]
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (isLoading || !password.trim()) return;
+    onComplete(password.trim());
+  };
 
   return (
-    <div className={`flex flex-col items-center justify-center animate-fade-in ${compact ? 'px-2' : 'px-4'}`}>
-      {/* Shield icon */}
-      <div className="w-12 h-12 rounded-2xl bg-primary-50 border border-primary-100 flex items-center justify-center mb-2.5 shadow-sm">
+    <div
+      className={`flex flex-col items-center justify-center animate-fade-in ${
+        compact ? 'px-2' : 'px-4'
+      }`}
+    >
+      {/* Shield Icon Badge */}
+      <div className="w-12 h-12 rounded-2xl bg-primary-50 border border-primary-100 flex items-center justify-center mb-3 shadow-xs">
         <ShieldCheckIcon size={24} color="#8A0F13" />
       </div>
 
       {/* Header */}
-      <div className="text-center mb-2.5">
-        <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 mb-0.5 leading-tight">{title}</h2>
+      <div className="text-center mb-4 max-w-sm">
+        <h2 className="text-xl sm:text-2xl font-black text-neutral-900 mb-1 leading-tight tracking-tight">
+          {title}
+        </h2>
         {subtitle && (
-          <p className="text-xs sm:text-sm text-neutral-500 leading-tight">{subtitle}</p>
+          <p className="text-xs sm:text-sm text-neutral-500 leading-relaxed">
+            {subtitle}
+          </p>
         )}
       </div>
 
-      {/* PIN dots with ring animation */}
-      <div
-        className={`flex gap-3 mb-2.5 ${
-          shakeError ? 'animate-[shake_0.5s_ease-in-out]' : ''
-        }`}
-      >
-        {Array.from({ length }).map((_, i) => (
-          <div
-            key={i}
-            className="relative flex items-center justify-center"
-          >
-            {/* Outer ring on fill */}
-            {i < pin.length && (
-              <span className="absolute inset-[-4px] rounded-full border-2 border-primary-300/50 animate-ring-pulse" />
-            )}
-            <div
-              className={`w-4 h-4 rounded-full transition-all duration-200 ${
-                i < pin.length
-                  ? 'bg-primary-800 scale-110 shadow-sm'
-                  : 'bg-neutral-200 border border-neutral-300/50'
-              }`}
-            />
+      {/* Password Authorization Form */}
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
+        <div
+          className={`bg-white p-4 sm:p-5 rounded-2xl border ${
+            error
+              ? 'border-red-300 ring-2 ring-red-100'
+              : 'border-neutral-200 focus-within:border-primary-800 focus-within:ring-2 focus-within:ring-primary-800/20'
+          } shadow-xs transition-all ${
+            shakeError ? 'animate-[shake_0.5s_ease-in-out]' : ''
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <label
+              htmlFor="auth-password-input"
+              className="text-xs font-bold text-neutral-700 uppercase tracking-wide"
+            >
+              Account Password
+            </label>
+            <span className="text-[10px] text-neutral-400 font-medium">
+              Registered Password
+            </span>
           </div>
-        ))}
-      </div>
 
-      {/* Error message */}
-      {error && (
-        <p className="text-primary-800 text-xs font-medium mb-2 animate-fade-in bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
-          {error}
-        </p>
-      )}
+          <div className="relative">
+            <input
+              id="auth-password-input"
+              ref={inputRef}
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
+              placeholder="Enter your account password"
+              autoComplete="current-password"
+              className="w-full pr-14 pl-3 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-sm font-semibold text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              tabIndex={-1}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 text-xs font-bold text-neutral-500 hover:text-primary-800 rounded-md hover:bg-neutral-100 transition-colors"
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
 
-      {/* Glassmorphic Keypad Container */}
-      <div className="w-full max-w-[310px] sm:max-w-[320px] bg-white/75 backdrop-blur-lg rounded-3xl border border-neutral-200/60 p-3 sm:p-3.5 shadow-elevated">
-        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
-          {keys.flat().map((key, idx) => {
-            if (key === '') {
-              return <div key={idx} />
-            }
-
-            if (key === 'del') {
-              return (
-                <button
-                  key={idx}
-                  onClick={handleDelete}
-                  onDoubleClick={handleClear}
-                  disabled={isLoading}
-                  className="h-[54px] sm:h-[58px] rounded-2xl flex items-center justify-center
-                             text-neutral-600 transition-all duration-150
-                             hover:bg-neutral-100/80 active:bg-neutral-200 active:scale-95
-                             disabled:opacity-30"
-                  aria-label="Delete"
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
-                    <line x1="18" y1="9" x2="12" y2="15" />
-                    <line x1="12" y1="9" x2="18" y2="15" />
-                  </svg>
-                </button>
-              )
-            }
-
-            return (
-              <button
-                key={idx}
-                onClick={() => handlePress(key)}
-                disabled={isLoading}
-                className={`h-[54px] sm:h-[58px] rounded-2xl flex items-center justify-center
-                           text-2xl font-semibold text-neutral-900
-                           bg-neutral-50/90 border border-neutral-100
-                           transition-all duration-150
-                           hover:bg-neutral-100 active:bg-neutral-200 active:scale-95
-                           disabled:opacity-30
-                           ${lastPressedKey === key ? 'animate-bounce-scale' : ''}`}
+          {/* Inline Error Message */}
+          {error && (
+            <div className="mt-3 p-2.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-primary-800 text-xs font-semibold animate-fade-in">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                className="shrink-0 mt-0.5"
               >
-                {key}
-              </button>
-            )
-          })}
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Loading state */}
-      {isLoading && (
-        <div className="mt-2.5 flex items-center gap-2 text-neutral-500 text-xs animate-pulse-soft bg-white px-3 py-1.5 rounded-xl border border-neutral-100 shadow-xs">
-          <div className="w-3.5 h-3.5 border-2 border-primary-200 border-t-primary-800 rounded-full animate-spin" />
-          <span className="font-medium">Verifying identity...</span>
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={isLoading || !password.trim()}
+          className="btn-primary w-full py-3 text-sm font-bold shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLoading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span>Verifying Password...</span>
+            </>
+          ) : (
+            <>
+              <span>Authorize Payment</span>
+              <span>→</span>
+            </>
+          )}
+        </button>
+
+        {/* Security Info Note */}
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 text-center">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span>End-to-end encrypted transaction authorization</span>
         </div>
-      )}
+      </form>
     </div>
-  )
+  );
 }

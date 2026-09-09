@@ -80,7 +80,7 @@ export default function Profile() {
       <div className="mb-6 flex items-center justify-between bg-white p-5 rounded-2xl border border-neutral-200 shadow-xs">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="w-10 h-10 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-center hover:bg-neutral-100 transition-colors text-neutral-700 md:hidden"
             aria-label="Back"
           >
@@ -90,7 +90,7 @@ export default function Profile() {
           </button>
           <div>
             <h1 className="text-xl font-black text-neutral-900 tracking-tight">Account & Security</h1>
-            <p className="text-xs text-neutral-500 font-medium">KYC verification, hardware fingerprint, geolocation & active sessions</p>
+            <p className="text-xs text-neutral-500 font-medium">KYC verification, device identifier, geolocation & active sessions</p>
           </div>
         </div>
         <button
@@ -144,9 +144,6 @@ export default function Profile() {
                   </span>
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-700">
                     Face Scan Verified
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-700">
-                    Touch ID Enrolled
                   </span>
                 </div>
               </div>
@@ -317,7 +314,7 @@ export default function Profile() {
                 <span className="font-bold text-neutral-900 uppercase font-mono">{deviceProfile?.platform ?? 'web'}</span>
               </div>
               <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl border border-neutral-200/60">
-                <span className="text-neutral-500 font-medium">Hardware Fingerprint</span>
+                <span className="text-neutral-500 font-medium">Device Hardware Identifier</span>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] text-neutral-700">
                     {deviceProfile?.deviceId ? `${deviceProfile.deviceId.slice(0, 12)}...` : 'dev_web_demo'}
@@ -350,7 +347,7 @@ export default function Profile() {
             <div className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl border border-neutral-200/60">
                 <div>
-                  <p className="font-bold text-neutral-900">Layer 1: 6-Digit PIN</p>
+                  <p className="font-bold text-neutral-900">Layer 1: Security Password</p>
                   <p className="text-[11px] text-neutral-500">Required on all outgoing transfers & withdrawals</p>
                 </div>
                 <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">Active</span>
@@ -360,14 +357,6 @@ export default function Profile() {
                 <div>
                   <p className="font-bold text-neutral-900">Layer 2: Face ID & Live Camera</p>
                   <p className="text-[11px] text-neutral-500">Live 3D telemetry landmark matching on step-up challenges</p>
-                </div>
-                <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">Enrolled</span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl border border-neutral-200/60">
-                <div>
-                  <p className="font-bold text-neutral-900">Biometric Backup: Fingerprint Sensor</p>
-                  <p className="text-[11px] text-neutral-500">Hardware Touch ID & WebAuthn for instant approval</p>
                 </div>
                 <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">Enrolled</span>
               </div>
